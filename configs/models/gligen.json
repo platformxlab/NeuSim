@@ -1,0 +1,87 @@
+{
+    "model_name": "gligen",
+    "model_type": "gligen",
+    "global_batch_size": 1,
+    "num_diffusion_steps": 1,
+    "total_num_diffusion_steps": 40,
+    "image_resolution": [512, 512],
+    "image_num_channels": 3,
+
+    "num_chips": 1,
+    "data_parallelism_degree": 1,
+    "tensor_parallelism_degree": 1,
+    "pipeline_parallelism_degree": 1,
+    "data_parallel_degree_dcn": 1,
+    "tensor_parallel_degree_dcn": 1,
+    "pipeline_parallel_degree_dcn": 1,
+
+    "fourier_embedder_config": {
+        "num_freqs": 64
+    },
+    "text_embedder_config": {
+        "d_model": 512,
+        "num_heads": 8,
+        "d_head": 64,
+        "d_ff": 2048,
+        "num_layers": 12,
+        "ffn_type": "default"
+    },
+    "image_embedder_config": {
+        "model_type": "vit",
+        "patch_size": 2,
+        "d_model": 1024,
+        "num_heads": 16,
+        "d_head": 64,
+        "d_ff": 4096,
+        "num_layers": 24,
+        "ffn_type": "default"
+    },
+    "spatial_condition_embedder_config": {
+        "model_type": "convnext",
+        "stem": {
+            "in_channels": 3,
+            "out_channels": 96,
+            "kernel_size": 4,
+            "stride": 4
+        },
+        "depths": [3, 3, 9, 3],
+        "dims": [96, 192, 384, 768]
+    },
+    "grounding_input_config": {
+        "text": {
+            "input_seqlen": 512,
+            "feature_dim": 768
+        },
+        "bbox": {
+            "input_seqlen": 8,
+            "feature_dim": 4,
+            "grounding_token_feature_dim": 768
+        },
+        "image": {
+            "resolution": [1024, 1024],
+            "image_num_channels": 3
+        },
+        "keypoint": {
+            "num_persons": 10,
+            "num_keypoints": 17,
+            "feature_dim": 256
+        },
+        "spatial_condition": {
+            "resolution": [256, 256],
+            "num_channels": 1
+        }
+    },
+    "unet_config": {
+        "noisy_latent_resolution": [64, 64],
+        "model_channels": 320,
+        "attention_resolutions": [ 4, 2, 1 ],
+        "num_res_blocks": 2,
+        "channel_mult": [ 1, 2, 4, 4 ],
+        "num_heads": 8,
+        "context_dim": 768
+    },
+
+    "use_flash_attention": true,
+    "output_file_path": "gligen.csv",
+    "output_dir": "./llava_ops"
+}

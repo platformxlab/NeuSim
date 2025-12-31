@@ -1,0 +1,42 @@
+{
+    "name": "4",
+    "num_sa": 8,
+    "num_vu": 4,
+    "num_vu_ports": 4,
+    "hbm_bw_GBps": 1200,
+    "vmem_size_MB": 128,
+    "freq_GHz": 1.05,
+
+    "sa_dim": 128,
+
+    "hbm_size_GB": 32,
+    "ici_bw_GBps": 112,
+    "dcn_bw_GBps": 12.5,
+
+    "TDP_W": 300,
+    "idle_power_W": 90,
+    "min_power_W": 121,
+    "avg_power_W": 170,
+    "max_power_W": 192,
+    "HBM_GBps_per_W": 65,
+    "ICI_GBps_per_W": 56.583,
+    "ICI_topology": "TORUS_3D",
+
+    "embodied_carbon_kgCO2": 366,
+
+    "static_power_W_per_sa": 1.222,
+    "static_power_W_per_vu": 0.427282,
+    "static_power_vmem_W": 21.777552,
+    "static_power_ici_W": 5.499,
+    "static_power_hbm_W": 10.01602386,
+    "static_power_hbm_mc_W": 4.006409544,
+    "static_power_hbm_phy_W": 6.009614316,
+    "static_power_other_W": 41.22229614,
+
+    "dynamic_power_W_per_SA": 16.91648,
+    "dynamic_power_W_per_VU": 1.591296,
+    "dynamic_power_vmem_W": 30.110208,
+    "dynamic_power_ici_W_per_GBps": 0.01767315271,
+    "dynamic_power_hbm_W_per_GBps": 0.01538461538,
+    "dynamic_power_other_W": 0
+}
