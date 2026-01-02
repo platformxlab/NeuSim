@@ -2,7 +2,7 @@
 
 ## Overview
 
-NeuSim is a simulator framework for modeling the performance and power of neural processing units (NPUs) running deep neural network (DNN) workloads.
+NeuSim is a simulator framework for modeling the performance and power behaviors of neural processing units (NPUs) when running machine learning workloads.
 
 ### Neural Processing Unit 101
 ![NPU Architecture](assets/npu_arch.svg)
