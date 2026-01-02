@@ -5,9 +5,8 @@
 NeuSim is a simulator framework for modeling the performance and power behaviors of neural processing units (NPUs) when running machine learning workloads.
 
 ### Neural Processing Unit 101
-<p align="center">
+
 ![NPU Architecture](assets/npu_arch.svg)
-</p>
 
 Neural processing units (NPUs) are specialized accelerators for machine learning (ML) workloads.
 It consists of systolic arrays (SAs) for matrix multiplications and SIMD vector units (VUs) for generic vector operations. Each chip has an off-chip high-bandwidth memory (HBM) to store the ML model weights and input/output data, and an on-chip SRAM to exploit data locality and hide HBM access latency. A direct memory access (DMA) engine performs asynchronous memory copy between the HBM and SRAM. Multiple NPU chips can be connected via high-speed inter-chip interconnect (ICI) links, which form an NPU pod. A pod is typically arranged as a 2D/3D torus, which is optimized for allreduce bandwidth. The DMA engine performs remote DMA (RDMA) operations to access another chip’s HBM or SRAM.
