@@ -1,5 +1,4 @@
-# NeuSim (NPU Simulator)
-An open-source simulator framework for neural processing units.
+# NeuSim: An Open-source Simulator Framework for Neural Processing Units
 
 ## Overview
 
