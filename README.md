@@ -215,13 +215,9 @@ If you use the power modeling features, please cite:
 author = {Xue, Yuqi and Huang, Jian},
 title = {ReGate: Enabling Power Gating in Neural Processing Units},
 year = {2025},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
 url = {https://doi.org/10.1145/3725843.3756038},
 booktitle = {Proceedings of the 58th IEEE/ACM International Symposium on Microarchitecture},
-pages = {1160–1177},
-numpages = {18},
-location = {Seoul, Korea},
+address = {Seoul, Korea},
 series = {MICRO '25}
 }
 ```
@@ -232,12 +228,9 @@ If you use the performance modeling features, please cite:
 author = {Xue, Yuqi and Liu, Yiqi and Nai, Lifeng and Huang, Jian},
 title = {Hardware-Assisted Virtualization of Neural Processing Units for Cloud Platforms},
 year = {2024},
-publisher = {IEEE Press},
 url = {https://doi.org/10.1109/MICRO61859.2024.00011},
 booktitle = {Proceedings of the 2024 57th IEEE/ACM International Symposium on Microarchitecture},
-pages = {1–16},
-numpages = {16},
-location = {Austin, TX, USA},
+address = {Austin, TX, USA},
 series = {MICRO '24}
 }
 
@@ -245,13 +238,9 @@ series = {MICRO '24}
 author = {Xue, Yuqi and Liu, Yiqi and Nai, Lifeng and Huang, Jian},
 title = {V10: Hardware-Assisted NPU Multi-tenancy for Improved Resource Utilization and Fairness},
 year = {2023},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
 url = {https://doi.org/10.1145/3579371.3589059},
 booktitle = {Proceedings of the 50th Annual International Symposium on Computer Architecture},
-articleno = {24},
-numpages = {15},
-location = {Orlando, FL, USA},
+address = {Orlando, FL, USA},
 series = {ISCA '23}
 }
 
@@ -259,13 +248,9 @@ series = {ISCA '23}
 author = {Xue, Yuqi and Liu, Yiqi and Huang, Jian},
 title = {System Virtualization for Neural Processing Units},
 year = {2023},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
 url = {https://doi.org/10.1145/3593856.3595912},
 booktitle = {Proceedings of the 19th Workshop on Hot Topics in Operating Systems},
-pages = {80–86},
-numpages = {7},
-location = {Providence, RI, USA},
+address = {Providence, RI, USA},
 series = {HotOS '23}
 }
 ```
