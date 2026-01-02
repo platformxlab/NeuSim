@@ -1,4 +1,4 @@
-# NeuSim: An Open-source Simulator Framework for Neural Processing Units
+# NeuSim: An Open-source Simulator Framework for NPUs
 
 ## Overview
 
@@ -10,7 +10,7 @@ NeuSim is a simulator framework for modeling the performance and power of neural
 Neural processing units (NPUs) are specialized accelerators for machine learning (ML) workloads.
 It consists of systolic arrays (SAs) for matrix multiplications and SIMD vector units (VUs) for generic vector operations. Each chip has an off-chip high-bandwidth memory (HBM) to store the ML model weights and input/output data, and an on-chip SRAM to exploit data locality and hide HBM access latency. A direct memory access (DMA) engine performs asynchronous memory copy between the HBM and SRAM. Multiple NPU chips can be connected via high-speed inter-chip interconnect (ICI) links, which form an NPU pod. A pod is typically arranged as a 2D/3D torus, which is optimized for allreduce bandwidth. The DMA engine performs remote DMA (RDMA) operations to access another chip’s HBM or SRAM.
 
-### Key Features of NeuSim
+### 🔥🔥🔥Key Features of NeuSim
 
 NeuSim features:
 - **Detailed performance modeling**: It models each comonent (e.g., systolic array, vector unit, on-chip SRAM, HBM, ICI) on an NPU chip and simulates each tensor operator in a DNN model to report rich statistics (e.g., execution time, FLOPS, memory traffic).
