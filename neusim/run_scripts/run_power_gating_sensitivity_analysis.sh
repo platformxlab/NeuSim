@@ -66,11 +66,11 @@ for PG_STRATEGY in "${pg_strategies[@]}"; do
     $(RAY_PREFIX carbon_analysis_llm_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b,deepseekv2-236b,deepseekv3-671b" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
     $(RAY_PREFIX carbon_analysis_llm_training_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b" --workload=training --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
     # DLRM
-    $(RAY_PREFIX carbon_analysis_dlrm_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="dlrm-s,dlrm-m,dlrm-l" --num_chips="1,2,4,8,16,32,64,128" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
+    $(RAY_PREFIX carbon_analysis_dlrm_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="dlrm-s,dlrm-m,dlrm-l" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
     # DiT
-    $(RAY_PREFIX carbon_analysis_dit_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="dit-xl" --num_chips="1,2,4,8,16,32,64,128" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
+    $(RAY_PREFIX carbon_analysis_dit_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="dit-xl" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
     # GLIGEN
-    $(RAY_PREFIX carbon_analysis_gligen_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="gligen" --num_chips="1,2,4,8,16,32,64,128" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
+    $(RAY_PREFIX carbon_analysis_gligen_inference_${PG_STRATEGY}_${UTIL_FACTOR}_${CI}) python carbon_analysis_main.py --models="gligen" --workload=inference --carbon_intensity=$CI --utilization_factor=$UTIL_FACTOR --npu_versions=$NPU_VERSIONS --power_gating_strategy=$PG_STRATEGY --results_path="$RESULTS_DIR/raw_None" &
     wait
 done
 
