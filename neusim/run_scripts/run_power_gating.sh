@@ -23,62 +23,62 @@ function RAY_PREFIX() {
 
 # launch performance simulation runs
 # LLM training
-# $(RAY_PREFIX trace_llm_training) python run_sim.py \
-#     --output_dir="$RESULTS_DIR/raw" \
-#     --configs_path="$CONFIGS_PATH" \
-#     --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b" \
-#     --num_chips="1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192" \
-#     --versions="2,3,4,5p,6p" \
-#     --training_batch_sizes="1,32,128" \
-#     --workload=training --verbosity=-1 &
-# # LLM inference
-# $(RAY_PREFIX trace_llm_inference) python run_sim.py \
-#     --output_dir="$RESULTS_DIR/raw" \
-#     --configs_path="$CONFIGS_PATH" \
-#     --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b,deepseekv2-236b,deepseekv3-671b" \
-#     --num_chips="1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192" \
-#     --versions="2,3,4,5p,6p" \
-#     --workload=inference --verbosity=-1 &
-# # DLRM inference
-# $(RAY_PREFIX trace_dlrm_inference) python run_sim.py \
-#     --output_dir="$RESULTS_DIR/raw" \
-#     --configs_path="$CONFIGS_PATH" \
-#     --models="dlrm-s,dlrm-m,dlrm-l" \
-#     --num_chips="1,2,4,8,16,32,64,128" \
-#     --versions="2,3,4,5p,6p" \
-#     --workload=inference --verbosity=-1 &
-# # DiT inference
-# $(RAY_PREFIX trace_dit_inference) python run_sim.py \
-#     --output_dir="$RESULTS_DIR/raw" \
-#     --configs_path="$CONFIGS_PATH" \
-#     --models="dit-xl" \
-#     --num_chips="1,2,4,8,16,32,64,128" \
-#     --versions="2,3,4,5p,6p" \
-#     --workload=inference --verbosity=-1 &
-# # GLIGEN inference
-# $(RAY_PREFIX trace_gligen_inference) python run_sim.py \
-#     --output_dir="$RESULTS_DIR/raw" \
-#     --configs_path="$CONFIGS_PATH" \
-#     --models="gligen" \
-#     --num_chips="1,2,4,8,16,32,64,128" \
-#     --versions="2,3,4,5p,6p" \
-#     --workload=inference --verbosity=-1 &
+$(RAY_PREFIX trace_llm_training) python run_sim.py \
+    --output_dir="$RESULTS_DIR/raw" \
+    --configs_path="$CONFIGS_PATH" \
+    --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b" \
+    --num_chips="1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192" \
+    --versions="2,3,4,5p,6p" \
+    --training_batch_sizes="1,32,128" \
+    --workload=training --verbosity=-1 &
+# LLM inference
+$(RAY_PREFIX trace_llm_inference) python run_sim.py \
+    --output_dir="$RESULTS_DIR/raw" \
+    --configs_path="$CONFIGS_PATH" \
+    --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b,deepseekv2-236b,deepseekv3-671b" \
+    --num_chips="1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192" \
+    --versions="2,3,4,5p,6p" \
+    --workload=inference --verbosity=-1 &
+# DLRM inference
+$(RAY_PREFIX trace_dlrm_inference) python run_sim.py \
+    --output_dir="$RESULTS_DIR/raw" \
+    --configs_path="$CONFIGS_PATH" \
+    --models="dlrm-s,dlrm-m,dlrm-l" \
+    --num_chips="1,2,4,8,16,32,64,128" \
+    --versions="2,3,4,5p,6p" \
+    --workload=inference --verbosity=-1 &
+# DiT inference
+$(RAY_PREFIX trace_dit_inference) python run_sim.py \
+    --output_dir="$RESULTS_DIR/raw" \
+    --configs_path="$CONFIGS_PATH" \
+    --models="dit-xl" \
+    --num_chips="1,2,4,8,16,32,64,128" \
+    --versions="2,3,4,5p,6p" \
+    --workload=inference --verbosity=-1 &
+# GLIGEN inference
+$(RAY_PREFIX trace_gligen_inference) python run_sim.py \
+    --output_dir="$RESULTS_DIR/raw" \
+    --configs_path="$CONFIGS_PATH" \
+    --models="gligen" \
+    --num_chips="1,2,4,8,16,32,64,128" \
+    --versions="2,3,4,5p,6p" \
+    --workload=inference --verbosity=-1 &
 
-# wait
+wait
 
 
-# # launch per op energy analysis runs
-# # LLMs
-# $(RAY_PREFIX energy_operator_llm_inference) python energy_operator_analysis_main.py --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b,deepseekv2-236b,deepseekv3-671b" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
-# $(RAY_PREFIX energy_operator_llm_training) python energy_operator_analysis_main.py --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b" --npu_versions="2,3,4,5p,6p" --workload=training --results_path="$RESULTS_DIR/raw" &
-# # DLRM
-# $(RAY_PREFIX energy_operator_dlrm_inference) python energy_operator_analysis_main.py --models="dlrm-s,dlrm-m,dlrm-l" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
-# # DiT
-# $(RAY_PREFIX energy_operator_dit_inference) python energy_operator_analysis_main.py --models="dit-xl" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
-# # GLIGEN
-# $(RAY_PREFIX energy_operator_gligen_inference) python energy_operator_analysis_main.py --models="gligen" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
+# launch per op energy analysis runs
+# LLMs
+$(RAY_PREFIX energy_operator_llm_inference) python energy_operator_analysis_main.py --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b,deepseekv2-236b,deepseekv3-671b" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
+$(RAY_PREFIX energy_operator_llm_training) python energy_operator_analysis_main.py --models="llama3-8b,llama2-13b,llama3-70b,llama3_1-405b" --npu_versions="2,3,4,5p,6p" --workload=training --results_path="$RESULTS_DIR/raw" &
+# DLRM
+$(RAY_PREFIX energy_operator_dlrm_inference) python energy_operator_analysis_main.py --models="dlrm-s,dlrm-m,dlrm-l" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
+# DiT
+$(RAY_PREFIX energy_operator_dit_inference) python energy_operator_analysis_main.py --models="dit-xl" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
+# GLIGEN
+$(RAY_PREFIX energy_operator_gligen_inference) python energy_operator_analysis_main.py --models="gligen" --npu_versions="2,3,4,5p,6p" --workload=inference --results_path="$RESULTS_DIR/raw" &
 
-# wait
+wait
 
 
 # launch carbon analysis runs
