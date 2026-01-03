@@ -8,15 +8,16 @@ NeuSim is a simulator framework for modeling the performance and power behaviors
 
 ![NPU Architecture](assets/npu_arch.svg)
 
-Neural processing units (NPUs) are specialized accelerators for machine learning (ML) workloads.
-It consists of systolic arrays (SAs) for matrix multiplications and SIMD vector units (VUs) for generic vector operations. Each chip has an off-chip high-bandwidth memory (HBM) to store the ML model weights and input/output data, and an on-chip SRAM to exploit data locality and hide HBM access latency. A direct memory access (DMA) engine performs asynchronous memory copy between the HBM and SRAM. Multiple NPU chips can be connected via high-speed inter-chip interconnect (ICI) links, which form an NPU pod. A pod is typically arranged as a 2D/3D torus, which is optimized for allreduce bandwidth. The DMA engine performs remote DMA (RDMA) operations to access another chip’s HBM or SRAM.
+An NPU chip consists of systolic arrays (SAs) for matrix multiplications and SIMD vector units (VUs) for generic vector operations. Each chip has an off-chip high-bandwidth memory (HBM) to store the ML model weights and input/output data, and an on-chip SRAM to exploit data locality and hide HBM access latency. A direct memory access (DMA) engine performs asynchronous memory copy between the HBM and SRAM. Multiple NPU chips can be connected via high-speed inter-chip interconnect (ICI) links, which form an NPU pod. A pod is typically arranged as a 2D/3D torus, which is optimized for allreduce bandwidth. The DMA engine performs remote DMA (RDMA) operations to access another chip’s HBM or SRAM.
 
 ### 🔥🔥🔥Key Features of NeuSim
 
+![NeuSim Design](assets/simulator_design.svg)
+
 NeuSim features:
 - **Detailed performance modeling**: It models each comonent (e.g., systolic array, vector unit, on-chip SRAM, HBM, ICI) on an NPU chip and simulates each tensor operator in a DNN model to report rich statistics (e.g., execution time, FLOPS, memory traffic).
-- **Power and energy modeling**: It models the static/dynamic power and energy consumption of each component on the NPU chip.
-- **Support for popular tensor operators and DNN architectures**: It supports simulating various popular DNN architectures, including LLMs (e.g., Llama, DeepSeek), recommendation models (e.g., DLRM), and stable diffusion models (e.g., DiT-XL, GLIGEN).
+- **Power, energy, and carbon modeling**: It models the static/dynamic power and energy consumption of each component on an NPU chip. It also models the embodied and operational carbon emissions of NPU.
+- **Support for popular DNN models**: NeuSim takes the model graph definition as an input. It supports various popular DNN architectures, including LLMs (e.g., Llama, DeepSeek), recommendation models (e.g., DLRM), and stable diffusion models (e.g., DiT-XL, GLIGEN).
 - **Multi-chip simulation**: It supports simulating multi-chip systems with different parallelism strategies (e.g., tensor parallelism, pipeline parallelism, data parallelism, expert parallelism).
 - **Scalability**: It leverages the Ray framework to distribute simulation jobs across multiple machines to speed up large-scale experiments and design space explorations.
 
