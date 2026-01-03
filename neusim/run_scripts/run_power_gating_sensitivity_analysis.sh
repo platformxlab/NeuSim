@@ -1,6 +1,7 @@
 #!/bin/bash
 
-### Run all stuffs for NPU reuse motivation numbers
+### Run all stuff for power gating sensitivity analysis
+### Dependency: run_power_gating.sh to generate base results
 
 # stop on error
 set -xe
