@@ -15,11 +15,11 @@ An NPU chip consists of systolic arrays (SAs) for matrix multiplications and SIM
 ![NeuSim Design](assets/simulator_design.svg)
 
 NeuSim features:
-- **Detailed performance modeling**: It models each comonent (e.g., systolic array, vector unit, on-chip SRAM, HBM, ICI) on an NPU chip and simulates each tensor operator in a DNN model to report rich statistics (e.g., execution time, FLOPS, memory traffic).
-- **Power, energy, and carbon modeling**: It models the static/dynamic power and energy consumption of each component on an NPU chip. It also models the embodied and operational carbon emissions of NPU.
+- **Detailed performance modeling**: NeuSim models each comonent (e.g., systolic array, vector unit, on-chip SRAM, HBM, ICI) on an NPU chip and reports rich statistics for each tensor operator (e.g., execution time, FLOPS, memory traffic). It helps chip architects and system designers identify microarchitectural bottlenecks (e.g., SA-bound, VU-bound, HBM-bound).
+- **Power, energy, and carbon modeling**: NeuSim models the static/dynamic power and energy consumption of each component on an NPU chip. It also models the embodied and operational carbon emissions.
 - **Support for popular DNN models**: NeuSim takes the model graph definition as an input. It supports various popular DNN architectures, including LLMs (e.g., Llama, DeepSeek), recommendation models (e.g., DLRM), and stable diffusion models (e.g., DiT-XL, GLIGEN).
-- **Multi-chip simulation**: It supports simulating multi-chip systems with different parallelism strategies (e.g., tensor parallelism, pipeline parallelism, data parallelism, expert parallelism).
-- **Scalability**: It leverages the Ray framework to distribute simulation jobs across multiple machines to speed up large-scale experiments and design space explorations.
+- **Multi-chip simulation**: NeuSim supports simulating multi-chip systems with different parallelism strategies (e.g., tensor parallelism, pipeline parallelism, data parallelism, expert parallelism).
+- **Scalability**: A typical use case of NeuSim is design space exploration: sweeping over millions of NPU hardware configurations (e.g., number of chips) and software parameters (e.g., batch size, parallelism config) to find the "optimal" setting. NeuSim automatically parallelizes simulation jobs across multiple machines using Ray to speed up large-scale design space explorations.
 
 NeuSim can be used to:
 - Evaluate the performance and power of a single tensor operator on a specific NPU hardware configuration.
