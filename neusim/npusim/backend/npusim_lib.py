@@ -1,3 +1,10 @@
+"""
+The backend implementation of NeuSim
+Version: 1.0.0
+"""
+
+
+
 from functools import lru_cache
 import re
 from typing import Any, Dict, List, Sequence, Tuple
