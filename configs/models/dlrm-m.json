@@ -1,0 +1,72 @@
+{
+    "model_name": "dlrm-m",
+    "model_type": "dlrm",
+    "global_batch_size": 1,
+    "embedding_dim": 64,
+    "num_indices_per_lookup": [
+        3, 2, 1, 2, 6, 1, 1, 1, 1, 7, 3,
+        8, 1, 6, 9, 5, 1, 1, 1, 12, 100, 27,
+        10, 3, 1, 1
+    ],
+    "embedding_table_sizes": [
+        39884406, 39043, 17289, 7420, 20263, 3, 7120, 1543, 63, 38532951, 2953546,
+        403346, 10, 2208, 11938, 155, 4, 976, 14, 39979771, 25641295, 39664984,
+        585935, 12972, 108, 36
+    ],
+    "num_dense_features": 1,
+    "bottom_mlp_config": [
+        {
+            "in_features": 512,
+            "out_features": 256,
+            "bias": true,
+            "activation": "relu"
+        },
+        {
+            "in_features": 256,
+            "out_features": 64,
+            "bias": true,
+            "activation": "relu"
+        }
+    ],
+    "top_mlp_config": [
+        {
+            "in_features": 1024,
+            "out_features": 1024,
+            "bias": true,
+            "activation": "relu"
+        },
+        {
+            "in_features": 1024,
+            "out_features": 512,
+            "bias": true,
+            "activation": "relu"
+        },
+        {
+            "in_features": 512,
+            "out_features": 256,
+            "bias": true,
+            "activation": "relu"
+        },
+        {
+            "in_features": 256,
+            "out_features": 1,
+            "bias": true,
+            "activation": "relu"
+        }
+    ],
+    "interaction": "dot",
+
+    "data_parallelism_degree": 1,
+    "tensor_parallelism_degree": 1,
+    "pipeline_parallelism_degree": 1,
+    "num_data_parallel_axes": 0,
+    "num_tensor_parallel_axes": 0,
+    "num_pipeline_parallel_axes": 0,
+    "data_parallel_degree_dcn": 1,
+    "tensor_parallel_degree_dcn": 1,
+    "pipeline_parallel_degree_dcn": 1,
+    "microbatch_size_dcn": 1,
+    "microbatch_size_ici": 1,
+    "num_chips": 1,
+    "output_file_path": "v2.csv"
+}
