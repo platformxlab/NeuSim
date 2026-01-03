@@ -45,12 +45,14 @@ NeuSim can be launched in different ways depending on the use cases, including s
 The `neusim/run_scripts/` directory contains several example scripts to run NeuSim simulations.
 
 ### Quick Start
+To get started immediately, we provide an automated example script (`neusim/run_scripts/example_npusim.sh`) that demonstrates the full NeuSim pipeline. It sweeps through various hardware and model configurations to determine the most cost-efficient NPU design that meets specific performance targets.
+
 1. Start ray server:
     ```bash
     ray start --head --port=6379
     ```
 
-2. Run the example script `neusim/run_scripts/example_npusim.sh`:
+2. Run the example script:
    ```bash
    cd neusim/run_scripts
    ./example_npusim.sh
