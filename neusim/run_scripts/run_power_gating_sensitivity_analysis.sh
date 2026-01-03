@@ -6,6 +6,10 @@
 # stop on error
 set -xe
 
+export NPUSIM_HOME=$(cd "../../"; pwd)
+export RESULTS_DIR="$NPUSIM_HOME/results"
+export CONFIGS_PATH="$NPUSIM_HOME/configs"
+
 export RAY_ADDRESS="http://127.0.0.1:8265"
 function RAY_PREFIX() {
     # if $1 is set, use it as job_id, else use default
