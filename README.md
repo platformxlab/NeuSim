@@ -8,7 +8,7 @@ NeuSim is a simulator framework for modeling the performance and power behaviors
 
 As shown in the above figure, an NPU chip consists of systolic arrays (SAs) for matrix multiplications and SIMD vector units (VUs) for generic vector operations. Each chip has an off-chip high-bandwidth memory (HBM) to store the ML model weights and input/output data, and an on-chip SRAM to exploit data locality and hide HBM access latency. A direct memory access (DMA) engine performs asynchronous memory copy between the HBM and SRAM. Multiple NPU chips can be connected via high-speed inter-chip interconnect (ICI) links, which form an NPU pod. A pod is typically arranged as a 2D/3D torus, which is optimized for AllReduce bandwidth. The DMA engine performs remote DMA (RDMA) operations to access another chip’s HBM or SRAM.
 
-### 🔥🔥🔥Key Features of NeuSim
+### 🔥 Key Features of NeuSim
 
 ![NeuSim Design](assets/simulator_design.svg)
 
