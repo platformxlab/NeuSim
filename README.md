@@ -18,7 +18,7 @@ NeuSim features:
 - **Flexibility**: NeuSim can be invoked at different levels of granularity, including single operator simulation, end-to-end DNN model simulation, and batch simulations for design space explorations. This provides flexibility to users with different needs.
 - **Support for popular DNN models**: NeuSim takes the model graph definition as an input. It supports various popular DNN architectures, including LLMs (e.g., Llama, DeepSeek), recommendation models (e.g., DLRM), and stable diffusion models (e.g., DiT-XL, GLIGEN).
 - **Multi-chip simulation**: NeuSim supports simulating multi-chip systems with different parallelism strategies (e.g., tensor parallelism, pipeline parallelism, data parallelism, expert parallelism).
-- **Scalability**: A typical use case of NeuSim is design space exploration: sweeping over millions of NPU hardware configurations (e.g., number of chips) and software parameters (e.g., batch size, parallelism config) to find the "optimal" setting. NeuSim automatically parallelizes simulation jobs across multiple machines using Ray to speed up large-scale design space explorations.
+- **Scalability**: A typical use case of NeuSim is the design space exploration: sweeping over millions of NPU hardware configurations (e.g., number of chips) and software parameters (e.g., batch size, parallelism config) to learn the "optimal" setting. NeuSim automatically parallelizes simulation jobs across multiple machines using Ray to speed up large-scale design space explorations.
 - **Advanced features**: NeuSim models advanced architectural features such as power gating and dynamic voltage and frequency scaling (DVFS) to help chip architects explore the trade-offs between performance, power, and energy efficiency.
 
 
