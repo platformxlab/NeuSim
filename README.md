@@ -17,17 +17,11 @@ An NPU chip consists of systolic arrays (SAs) for matrix multiplications and SIM
 NeuSim features:
 - **Detailed performance modeling**: NeuSim models each comonent (e.g., systolic array, vector unit, on-chip SRAM, HBM, ICI) on an NPU chip and reports rich statistics for each tensor operator (e.g., execution time, FLOPS, memory traffic). It helps chip architects and system designers identify microarchitectural bottlenecks (e.g., SA-bound, VU-bound, HBM-bound).
 - **Power, energy, and carbon modeling**: NeuSim models the static/dynamic power and energy consumption of each component on an NPU chip. It also models the embodied and operational carbon emissions.
+- **Flexibility**: NeuSim can be invoked at different levels of granularity, including single operator simulation, end-to-end DNN model simulation, and batch simulations for design space explorations. This provides the flexibility to users with different needs.
 - **Support for popular DNN models**: NeuSim takes the model graph definition as an input. It supports various popular DNN architectures, including LLMs (e.g., Llama, DeepSeek), recommendation models (e.g., DLRM), and stable diffusion models (e.g., DiT-XL, GLIGEN).
 - **Multi-chip simulation**: NeuSim supports simulating multi-chip systems with different parallelism strategies (e.g., tensor parallelism, pipeline parallelism, data parallelism, expert parallelism).
 - **Scalability**: A typical use case of NeuSim is design space exploration: sweeping over millions of NPU hardware configurations (e.g., number of chips) and software parameters (e.g., batch size, parallelism config) to find the "optimal" setting. NeuSim automatically parallelizes simulation jobs across multiple machines using Ray to speed up large-scale design space explorations.
-
-NeuSim can be used to:
-- Evaluate the performance and power of a single tensor operator on a specific NPU hardware configuration.
-- Evaluate the training/inference of a DNN model on a specific NPU hardware configuration.
-- Analyze the microarchitectural bottlenecks of NPUs when running DNN workloads (for example, identifying whether the performance is compute-bound or memory-bound, systolic array-bound or vector unit-bound).
-- Explore the design space of NPU hardware configurations and DNN parallelism strategies (for example, finding the energy- or cost-optimal setting for meeting a certain inference latency SLO).
-- Analyze the carbon footprint of DNN workloads on NPUs under different datacenter carbon intensities and NPU duty cycles.
-- Explore new architectural features such as power gating and DVFS on NPUs.
+- **Advanced features**: NeuSim models advanced architectural features such as power gating and dynamic voltage and frequency scaling (DVFS) to help chip architects explore the trade-offs between performance, power, and energy efficiency.
 
 
 ## Installation
