@@ -165,66 +165,6 @@ def construct_hlo_module_from_node_costs(node_costs: Sequence[dict[str, Any] | O
     return module
 
 
-def get_tfsim_node_costs(tfsim_dir: str, bn: str, bs: int, sa: int = 4, vu: int = 1) -> list[dict[str, Any]]:
-    if bn in ["llama13b"]:  # llama2-13b from tf-sim analytical
-        node_cost_csv_path = os.path.join(tfsim_dir, f"xla_hlo_{bn}_{bs}", f"sa{sa}_vu{vu}", "JellyFish-TPU_Conv-Opt-4SA-4VU-LLaMA-13B-serving-fwd_bwd_ops.csv")
-    # elif bn in ["clip-vit", "vicuna13b", "seem", "lama", "gligen"]:  # multimodal benchmarks
-    #     node_cost_csv_path = os.path.join(tfsim_dir, f"xla_hlo_{bn}_{bs}", f"sa{sa}_vu{vu}", "cluster*", "node_costs.csv")
-    else:  # other benchmarks from tf-sim
-        node_cost_csv_path = os.path.join(tfsim_dir, f"xla_hlo_{bn}_{bs}", f"sa{sa}_vu{vu}", "cluster*", "node_costs.csv")
-    nc_glob = glob.glob(node_cost_csv_path)
-    assert len(nc_glob) == 1, f"benchmark '{bn}.{bs}': node_costs.csv not found in directory {node_cost_csv_path}"
-    node_costs_file_path = nc_glob[0]
-    with open(node_costs_file_path, "r") as f:
-        reader = csv.DictReader(f)
-        node_costs = list(reader)
-
-    # allocate new field names
-    def init_new_field(field_name, default_value = None):
-        if field_name not in nc:
-            nc[field_name] = default_value
-    for nc in node_costs:
-        init_new_field("parsed_op_type")
-        init_new_field("dim_labels")
-        init_new_field("tile_shapes")
-        init_new_field("num_tiles")
-        init_new_field("max_vmem_demand_bytes")
-        init_new_field("num_mxu_ops", 0)
-        init_new_field("einsum_B_size")
-        init_new_field("einsum_M_size")
-        init_new_field("einsum_N_size")
-        init_new_field("einsum_K_size")
-
-    return node_costs
-
-
-def get_top_level_node_op_name(node: dict[str, Any]) -> str:
-    '''return the op name of the top level node of @node'''
-    if node["Top Level Node"] == "True":
-        return node["Op Name"]
-
-    name_dir = str(node["Op Name"]).split("/")
-    tln_name = name_dir[0]
-
-    # hack for While node in transformer model
-    if "while" in tln_name:
-        return "While"
-
-    return tln_name
-
-
-def get_top_level_node(node: dict[str, Any], node_costs: list[dict[str, Any]]) -> dict[str, Any]:
-    '''return the top level node of @node'''
-    if node["Top Level Node"] == "True":
-        return node
-
-    tln_name = get_top_level_node_op_name(node)
-    for nc in node_costs:
-        if nc["Op Name"] == tln_name:
-            return nc
-    raise ValueError(f"Top level node not found for node: {node}")
-
-
 def get_total_execution_time_ns_from_ops(node_costs: list[Operator.Operator]) -> int:
     '''return the total execution time in ns from @node_costs'''
     return sum([
