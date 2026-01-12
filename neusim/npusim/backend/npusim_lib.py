@@ -61,16 +61,6 @@ def parse_tensor_shapes_for_node_cost_conv(node_cost: Operator.Operator, hlo_mod
         ax.size = output_shapes[0][ax.index]
         ax.data_type = output_dtypes[0]
 
-    # # special hack for each model
-    # if "dlrm" in hlo_module.name:
-    #     I.metadata["op_type"] = "MatMul"
-    # elif "bert" in hlo_module.name:
-    #     if I.metadata["op_type"] == "unknown":
-    #         I.metadata["op_type"] = "Einsum"
-    # elif "transformer" in hlo_module.name:
-    #     if I.metadata["op_type"] == "unknown":
-    #         I.metadata["op_type"] = "Einsum"
-
     def try_check_einsum() -> bool:
         '''
         try to check the parsed axes as an Einsum operator.
@@ -104,27 +94,6 @@ def parse_tensor_shapes_for_node_cost_conv(node_cost: Operator.Operator, hlo_mod
     else:
         # otherwise treat this op as a conv2d
         I.metadata["op_type"] = "Conv2D"
-
-    # # for MatMul: remove axes of size 1 that is used as placeholder in HLO
-    # if I.metadata["op_type"] in EINSUM_OP_TYPES + ["unknown"]:
-    #     I.input_axes[0] = [ax for ax in I.input_axes[0] if ax.size != 1]
-    #     I.input_axes[1] = [ax for ax in I.input_axes[1] if ax.size != 1]
-    #     I.output_axes = [ax for ax in I.output_axes if ax.size != 1]
-
-    # For Einsum/MatMul, axes with the same name have the same size;
-    # for Convolution, spatial0/1 axes have different sizes in kernel (input1). ?
-    # all_axes = I.input_axes[0] + I.input_axes[1] + I.output_axes
-    # axes_dict = {}
-    # for ax in all_axes:
-    #     if ax.name not in axes_dict:
-    #         axes_dict[ax.name] = ax.size
-    #     else:
-    #         if I.metadata["op_type"] in EINSUM_OP_TYPES:
-    #             # For Einsum/MatMul, check axis sizes match
-    #             assert axes_dict[ax.name] == ax.size, f"axes size not consistent: {ax.name}"
-    #         else:
-    #             # If not match, guess this is a Conv2D
-    #             I.metadata["op_type"] = "Conv2D"
 
     return I, node_cost
 
@@ -167,15 +136,6 @@ def parse_tensor_shapes_for_node_cost(node_cost: Operator.Operator, hlo_module: 
         return parse_tensor_shapes_for_node_cost_conv(node_cost, hlo_module)
     else:
         return parse_tensor_shapes_for_node_cost_default(node_cost, hlo_module)
-
-
-# def parse_tensor_shapes_for_op(op: Operator.Operator, hlo_module: hlo_struct.HLOModule) -> tuple[hlo_struct.HLOInstruction, Operator.Operator]:
-#     if op.opcode in ["convolution", "Conv2D", "Einsum", "MatMul", "BatchMatMulV2"]:
-#         I, op_dict = parse_tensor_shapes_for_node_cost_conv(Operator.to_csv_dict(op), hlo_module)
-#     else:
-#         I, op_dict = parse_tensor_shapes_for_node_cost_default(Operator.to_csv_dict(op), hlo_module)
-
-#     return I, Operator.from_csv_dict(op_dict)
 
 
 def separate_axes_by_type_for_matmul(
