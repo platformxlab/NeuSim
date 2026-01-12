@@ -158,3 +158,26 @@ class TestNPUSimBackendUtil(unittest.TestCase):
             n_lanes=128, n_sublanes=8, n_ports=2, freq_GHz=1.75
         )
         self.assertAlmostEqual(vpu_bw, 3584.0)
+
+    def test_parse_input_tensor_shapes(self):
+        input_str = "DT_FLOAT:[1,128],DT_INT:[128,64]"
+        shapes, dtypes = util_under_test.parse_input_tensor_shapes(input_str)
+        self.assertEqual(shapes, [[1, 128], [128, 64]])
+        self.assertEqual(dtypes, ["DT_FLOAT", "DT_INT"])
+
+        # Test single tensor
+        input_str_single = "DT_FLOAT:[1,128]"
+        shapes, dtypes = util_under_test.parse_input_tensor_shapes(input_str_single)
+        self.assertEqual(shapes, [[1, 128]])
+        self.assertEqual(dtypes, ["DT_FLOAT"])
+
+    def test_parse_output_tensor_shapes(self):
+        output_str = "[DT_FLOAT:(1,128)]"
+        shapes, dtypes = util_under_test.parse_output_tensor_shapes(output_str)
+        self.assertEqual(shapes, [[1, 128]])
+        self.assertEqual(dtypes, ["DT_FLOAT"])
+
+        output_str_multi = "[DT_FLOAT:(1,128),DT_INT:(128,64)]"
+        shapes, dtypes = util_under_test.parse_output_tensor_shapes(output_str_multi)
+        self.assertEqual(shapes, [[1, 128], [128, 64]])
+        self.assertEqual(dtypes, ["DT_FLOAT", "DT_INT"])

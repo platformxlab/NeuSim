@@ -3,11 +3,48 @@ from functools import lru_cache
 import glob
 from math import ceil, sqrt
 import os
+import re
 from typing import Any, Sequence
 
 import neusim.npusim.frontend.Operator as Operator
 import neusim.xla_hlo_parser.xla_hlo_trace_parser as hlo_parser
 import neusim.xla_hlo_parser.xla_hlo_structures as hlo_struct
+
+
+def parse_input_tensor_shapes(input_tensor_shape_str: str) -> tuple[list[list[int]], list[str]]:
+    '''Returns (shape, dtype)'''
+    tensor_shape_regex_pattern = r",*DT_[A-Z|0-9]+:"
+    shapes = re.split(tensor_shape_regex_pattern, input_tensor_shape_str)
+    shapes = [x for x in shapes if len(x) > 0]
+    shapes = [x.removeprefix("[").removesuffix("]") for x in shapes]
+    shapes = [
+        [int(y) for y in x.split(",")]
+        for x in shapes
+    ]
+
+    dtype_regex_pattern = r"DT_[A-Z|0-9]+:"
+    dtypes = re.findall(dtype_regex_pattern, input_tensor_shape_str)
+    dtypes = [x.removesuffix(":") for x in dtypes]
+
+    return shapes, dtypes
+
+
+def parse_output_tensor_shapes(output_tensor_shape_str: str) -> tuple[list[list[int]], list[str]]:
+    '''Returns (shape, dtype)'''
+    tensor_shape_regex_pattern = r",*DT_[A-Z|0-9]+:"
+    shapes = re.split(tensor_shape_regex_pattern, output_tensor_shape_str)
+    shapes = [x.removeprefix("[").removesuffix("]").removesuffix("],[") for x in shapes]
+    shapes = [x for x in shapes if len(x) > 0]
+    shapes = [
+        [int(y) for y in x[1:-1].split(",")]  # y is like "(1, 2, 3)"
+        for x in shapes
+    ]
+
+    dtype_regex_pattern = r"DT_[A-Z|0-9]+:"
+    dtypes = re.findall(dtype_regex_pattern, output_tensor_shape_str)
+    dtypes = [x.removesuffix(":") for x in dtypes]
+
+    return shapes, dtypes
 
 
 def get_size_bytes_from_dtype(dtype: str) -> int:
