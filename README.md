@@ -1,5 +1,7 @@
 # NeuSim: An Open-source Simulator Framework for NPUs
 
+[![CI Lint Status](https://github.com/platformxlab/NeuSim/actions/workflows/lint.yml/badge.svg)](https://github.com/platformxlab/NeuSim/actions/workflows/lint.yml) [![CI Test Status](https://github.com/platformxlab/NeuSim/actions/workflows/test.yml/badge.svg)](https://github.com/platformxlab/NeuSim/actions/workflows/test.yml)
+
 NeuSim is a simulator framework for modeling the performance and power behaviors of neural processing units (NPUs) when running machine learning workloads.
 
 ### 📌 Neural Processing Unit 101
