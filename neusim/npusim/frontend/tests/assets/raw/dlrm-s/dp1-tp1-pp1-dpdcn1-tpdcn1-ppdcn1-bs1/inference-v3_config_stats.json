@@ -1,0 +1,102 @@
+{
+    "ICI_bisection_BW_per_chip_GBps": -164.0,
+    "topology": [],
+    "table_sharding": [
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        },
+        {
+            "embed_dim": 64,
+            "num_entries": 10000000,
+            "num_indices_per_lookup": 100,
+            "row_sharding_degree": 1,
+            "column_sharding_degree": 1,
+            "data_parallel_degree": 1,
+            "chip_assignment": [
+                0
+            ],
+            "batch_size": 1
+        }
+    ]
+}

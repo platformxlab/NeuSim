@@ -1,0 +1,184 @@
+{
+    "total_pp_time_ns": 0,
+    "total_pp_ici_time_ns": 0,
+    "total_pp_dcn_time_ns": 0,
+    "total_execution_time_non_pp_ns": 4104674,
+    "overlapped_compute_time_non_pp_ns": 1207745,
+    "compute_only_time_non_pp_ns": 2705190,
+    "memory_only_time_non_pp_ns": 191739,
+    "ici_bound_time_non_pp_ns": 0,
+    "total_execution_time_chip_ns": 4104674,
+    "overlapped_compute_time_chip_ns": 1207745,
+    "compute_only_time_chip_ns": 2705190,
+    "memory_only_time_chip_ns": 191739,
+    "ici_bound_time_chip_ns": 0,
+    "bounded_by_pp_chip": false,
+    "throughput_requests_per_sec": 6.090617671464287,
+    "throughput_step_per_sec_per_request": 243.62470685857147,
+    "latency_sec": 0.16418696,
+    "latency_step_sec": 0.00010261685,
+    "mem_footprint_GB": 94.99999904632568,
+    "out_of_memory": false,
+    "sim_config": {
+        "PUE": 1.1,
+        "carbon_intensity_kgCO2_per_kWh": 0.5,
+        "name": "5p",
+        "num_sa": 8,
+        "num_vu": 6,
+        "num_vu_ports": 6,
+        "hbm_bw_GBps": 2765.0,
+        "hbm_latency_ns": 500,
+        "vmem_size_MB": 128,
+        "freq_GHz": 1.7,
+        "sa_dim": 128,
+        "hbm_size_GB": 95,
+        "ici_bw_GBps": 200.0,
+        "dcn_bw_GBps": 25.0,
+        "pcie_bw_GBps": 32.0,
+        "ici_latency_ns": 3330,
+        "dcn_latency_ns": 3700,
+        "pcie_latency_ns": 400,
+        "TDP_W": 350.0,
+        "min_power_W": 1.0,
+        "avg_power_W": 1.0,
+        "max_power_W": 331.0,
+        "HBM_GBps_per_W": 123.5,
+        "ICI_GBps_per_W": 56.583,
+        "ICI_topology": "TORUS_3D",
+        "embodied_carbon_kgCO2": 585.0,
+        "use_vu_for_small_matmul": true,
+        "static_power_W_per_sa": 1.35868996,
+        "static_power_W_per_vu": 0.475076728,
+        "static_power_vmem_W": 24.21353615,
+        "static_power_ici_W": 6.114104803,
+        "static_power_hbm_mc_W": 10.264041296,
+        "static_power_hbm_phy_W": 15.396061944,
+        "static_power_other_W": 44.82811018,
+        "dynamic_power_W_per_SA": 28.19413333,
+        "dynamic_power_W_per_VU": 2.65216,
+        "dynamic_power_vmem_W": 50.18368,
+        "dynamic_power_ici_W_per_GBps": 0.01767315271,
+        "dynamic_power_hbm_W_per_GBps": 0.01261538462,
+        "dynamic_power_other_W": 0.0,
+        "pg_config": "NoPG",
+        "enable_dvfs": false,
+        "model_name": "gligen",
+        "model_type": "gligen",
+        "global_batch_size": 1,
+        "num_chips": 1,
+        "data_parallelism_degree": 1,
+        "tensor_parallelism_degree": 1,
+        "pipeline_parallelism_degree": 1,
+        "num_data_parallel_axes": 3,
+        "num_tensor_parallel_axes": 0,
+        "num_pipeline_parallel_axes": 0,
+        "data_parallel_degree_dcn": 1,
+        "tensor_parallel_degree_dcn": 1,
+        "pipeline_parallel_degree_dcn": 1,
+        "microbatch_size_dcn": 1,
+        "microbatch_size_ici": 1,
+        "output_file_path": "/mnt/nvme0n1p1/yuqixue2/neusim/NeuSim/results/raw/gligen/dp1-tp1-pp1-dpdcn1-tpdcn1-ppdcn1-bs1/inference-v5p.csv",
+        "num_diffusion_steps": 1,
+        "total_num_diffusion_steps": 40,
+        "image_resolution": [
+            512,
+            512
+        ],
+        "image_num_channels": 3,
+        "use_flash_attention": true,
+        "fourier_embedder_config": {
+            "num_freqs": 64
+        },
+        "text_embedder_config": {
+            "d_model": 512,
+            "num_heads": 8,
+            "d_head": 64,
+            "d_ff": 2048,
+            "num_layers": 12,
+            "ffn_type": "default"
+        },
+        "image_embedder_config": {
+            "model_type": "vit",
+            "patch_size": 2,
+            "d_model": 1024,
+            "num_heads": 16,
+            "d_head": 64,
+            "d_ff": 4096,
+            "num_layers": 24,
+            "ffn_type": "default"
+        },
+        "spatial_condition_embedder_config": {
+            "model_type": "convnext",
+            "stem": {
+                "in_channels": 3,
+                "out_channels": 96,
+                "kernel_size": 4,
+                "stride": 4
+            },
+            "depths": [
+                3,
+                3,
+                9,
+                3
+            ],
+            "dims": [
+                96,
+                192,
+                384,
+                768
+            ]
+        },
+        "grounding_input_config": {
+            "text": {
+                "input_seqlen": 512,
+                "feature_dim": 768
+            },
+            "bbox": {
+                "input_seqlen": 8,
+                "feature_dim": 4,
+                "grounding_token_feature_dim": 768
+            },
+            "image": {
+                "resolution": [
+                    1024,
+                    1024
+                ],
+                "image_num_channels": 3
+            },
+            "keypoint": {
+                "num_persons": 10,
+                "num_keypoints": 17,
+                "feature_dim": 256
+            },
+            "spatial_condition": {
+                "resolution": [
+                    256,
+                    256
+                ],
+                "num_channels": 1
+            }
+        },
+        "unet_config": {
+            "noisy_latent_resolution": [
+                64,
+                64
+            ],
+            "model_channels": 320,
+            "attention_resolutions": [
+                4,
+                2,
+                1
+            ],
+            "num_res_blocks": 2,
+            "channel_mult": [
+                1,
+                2,
+                4,
+                4
+            ],
+            "num_heads": 8,
+            "context_dim": 768
+        },
+        "output_dir": "./llava_ops"
+    }
+}
