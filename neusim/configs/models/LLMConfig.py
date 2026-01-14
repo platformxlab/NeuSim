@@ -102,7 +102,7 @@ class MoELLMConfig(LLMConfig):
     def __init__(self, **kwargs):
         if "moe_d_ff" not in kwargs:
             # If moe_d_ff is not provided, default to d_ff.
-            kwargs["moe_d_ff"] = kwargs["d_ff"]
+            kwargs["moe_d_ff"] = kwargs.get("d_ff", self.model_fields["d_ff"].default)
         super().__init__(**kwargs)
 
     def __hash__(self) -> int:
