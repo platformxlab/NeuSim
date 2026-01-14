@@ -7,7 +7,6 @@ import re
 from typing import Any, Sequence
 
 import neusim.npusim.frontend.Operator as Operator
-import neusim.xla_hlo_parser.xla_hlo_trace_parser as hlo_parser
 import neusim.xla_hlo_parser.xla_hlo_structures as hlo_struct
 
 
