@@ -1305,7 +1305,7 @@ def get_axes_size_for_flash_attention(
     assert len(Q_shape) == 4 and len(K_shape) == 4 and len(V_shape) == 4, f"Invalid input shapes: {Q_shape}, {K_shape}, {V_shape}"
     assert Q_shape[0] == K_shape[0] == V_shape[0], f"Batch size mismatch: {Q_shape[0]}, {K_shape[0]}, {V_shape[0]}"
     batch = Q_shape[0]
-    assert Q_shape[2] == K_shape[2] == V_shape[2], f"Num heads mismatch: {Q_shape[2]}, {K_shape[2]}, {V_shape[2]}"
+    assert K_shape[2] == V_shape[2], f"KV num heads mismatch: {K_shape[2]}, {V_shape[2]}"
     num_heads = Q_shape[2]
     assert Q_shape[3] == K_shape[3] == V_shape[3], f"Head dim mismatch: {Q_shape[3]}, {K_shape[3]}, {V_shape[3]}"
     d_head = Q_shape[3]

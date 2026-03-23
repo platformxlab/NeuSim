@@ -136,20 +136,20 @@ def get_flash_attention_output_shape(
 ) -> list[int]:
     '''
     Get the output shape of a flash attention operation.
-    Assumes the input shape dim order is [batch, seqlen, num_heads, d_model].
+    Assumes the input shape dim order is [batch, seqlen, num_heads, d_head].
     @param Q_shape: Shape of Q matrix.
     @param K_shape: Shape of K matrix.
     @param V_shape: Shape of V matrix.
     '''
     assert Q_shape[0] == K_shape[0] == V_shape[0], "Batch size mismatch."
     batch = Q_shape[0]
-    assert Q_shape[2] == K_shape[2] == V_shape[2], "num_heads mismatch."
-    num_heads = Q_shape[2]
-    assert Q_shape[3] == K_shape[3] == V_shape[3], "d_model mismatch."
-    d_model = Q_shape[2]
+    assert K_shape[2] == V_shape[2], "KV num_heads mismatch."
+    num_q_heads = Q_shape[2]
+    assert Q_shape[3] == K_shape[3] == V_shape[3], "d_head mismatch."
+    d_head = Q_shape[3]
     assert K_shape[1] == V_shape[1], "KV sequence length mismatch."
     q_seqlen = Q_shape[1]
-    output_shape = [batch, q_seqlen, num_heads, d_model]
+    output_shape = [batch, q_seqlen, num_q_heads, d_head]
     return output_shape
 
 
@@ -160,24 +160,24 @@ def get_flops_flash_attention(
 ) -> int:
     '''
     FLOP count of flash attention in forward pass is the same as normal attention.
-    Assumes the input shape dim order is [batch, seqlen, num_heads, d_model].
+    Assumes the input shape dim order is [batch, seqlen, num_heads, d_head].
     '''
     assert Q_shape[0] == K_shape[0] == V_shape[0], "Batch size mismatch."
     batch = Q_shape[0]
-    assert Q_shape[2] == K_shape[2] == V_shape[2], "num_heads mismatch."
-    num_heads = Q_shape[2]
-    assert Q_shape[3] == K_shape[3] == V_shape[3], "d_model mismatch."
-    d_model = Q_shape[2]
+    assert K_shape[2] == V_shape[2], "KV num_heads mismatch."
+    num_q_heads = Q_shape[2]
+    assert Q_shape[3] == K_shape[3] == V_shape[3], "d_head mismatch."
+    d_head = Q_shape[3]
     assert K_shape[1] == V_shape[1], "KV sequence length mismatch."
     q_seqlen = Q_shape[1]
     kv_seqlen = K_shape[1]
 
-    QK_flops = num_heads * batch * q_seqlen * d_model * kv_seqlen * 2
+    QK_flops = num_q_heads * batch * q_seqlen * d_head * kv_seqlen * 2
     softmax_QK_flops = get_flops_unary_op(
         "Softmax",
-        [num_heads, batch, q_seqlen, kv_seqlen],
+        [num_q_heads, batch, q_seqlen, kv_seqlen],
     )
-    QK_V_flops = num_heads * batch * q_seqlen * d_model * kv_seqlen * 2
+    QK_V_flops = num_q_heads * batch * q_seqlen * d_head * kv_seqlen * 2
 
     return QK_flops + softmax_QK_flops + QK_V_flops
 
@@ -1908,7 +1908,8 @@ def create_multi_head_attention_bwd(
     d_value: int | None = None,
     use_flash_attention: bool = False,
     tensor_parallelism_axes: Sequence[int] = [1],
-    ici_bw_GBps: float = 900.0
+    ici_bw_GBps: float = 900.0,
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
     '''
     IMPORTANT NOTE: All parallelized attention ops must be created by calling this function.
@@ -1920,6 +1921,8 @@ def create_multi_head_attention_bwd(
     #Preprocess input dimensions
     tensor_parallelism_degree = int(np.prod(tensor_parallelism_axes))
     num_heads = ceil(num_heads / tensor_parallelism_degree)
+    num_kv_heads = num_kv_heads or num_heads * tensor_parallelism_degree
+    num_kv_heads = ceil(num_kv_heads / tensor_parallelism_degree)
     if d_model is not None:
         d_model_parallel = ceil(d_model / tensor_parallelism_degree)
     if d_query is not None:
@@ -1963,7 +1966,8 @@ def create_multi_head_attention_bwd(
             fusion_id_start,
             description_prefix,
             tensor_parallelism_axes=tensor_parallelism_axes,
-            ici_bw_GBps=ici_bw_GBps
+            ici_bw_GBps=ici_bw_GBps,
+            num_kv_heads=num_kv_heads,
         )
     elif type == "cross-attention":
     #     return create_multi_head_cross_attention_bwd(
@@ -2011,6 +2015,7 @@ def create_multi_head_attention(
     use_flash_attention: bool = False,
     tensor_parallelism_axes: Sequence[int] = [1],
     ici_bw_GBps: float = 900.0,
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
     '''
     IMPORTANT NOTE: All parallelized attention ops must be created by calling this function.
@@ -2021,7 +2026,9 @@ def create_multi_head_attention(
 
     # Preprocess input dimensions
     tensor_parallelism_degree = int(np.prod(tensor_parallelism_axes))
+    num_kv_heads = num_kv_heads or num_heads
     num_heads = ceil(num_heads / tensor_parallelism_degree)
+    num_kv_heads = ceil(num_kv_heads / tensor_parallelism_degree)
     if d_model is not None:
         d_model_parallel = ceil(d_model / tensor_parallelism_degree)
     if d_query is not None:
@@ -2047,7 +2054,8 @@ def create_multi_head_attention(
             description_prefix,
             use_flash_attention,
             tensor_parallelism_axes=tensor_parallelism_axes,
-            ici_bw_GBps=ici_bw_GBps
+            ici_bw_GBps=ici_bw_GBps,
+            num_kv_heads=num_kv_heads,
         )
     elif type == "self-attention":
         return create_multi_head_self_attention(
@@ -2065,7 +2073,8 @@ def create_multi_head_attention(
             is_decode,
             description_prefix,
             tensor_parallelism_axes=tensor_parallelism_axes,
-            ici_bw_GBps = ici_bw_GBps
+            ici_bw_GBps=ici_bw_GBps,
+            num_kv_heads=num_kv_heads,
         )
     elif type == "cross-attention":
         return create_multi_head_cross_attention(
@@ -2084,7 +2093,8 @@ def create_multi_head_attention(
             description_prefix,
             use_flash_attention,
             tensor_parallelism_axes=tensor_parallelism_axes,
-            ici_bw_GBps=ici_bw_GBps
+            ici_bw_GBps=ici_bw_GBps,
+            num_kv_heads=num_kv_heads,
         )
     else:
         raise ValueError(f"Unsupported attention type: {type}")
@@ -2100,51 +2110,99 @@ def create_multi_head_normal_attention_block(
     dtype: str = "DT_BFLOAT16",
     fusion_id_start: int = 0,
     description_prefix: str = "",
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
     ops: list[Operator] = []
     fusion_id = fusion_id_start
+    num_kv_heads = num_kv_heads or num_heads
 
-    ops.append(
-        create_einsum_op(
-            input_a_shape=[batch_size, q_seqlen, num_heads, d_head],
-            input_b_shape=[batch_size, kv_seqlen, num_heads, d_head],
-            einsum_expr="BLND;BSND->BLSN",
-            dtype=dtype,
-            memory_placement=[0, 0, 1],
-            name="MatMul: attnWeights = Q*K",
-            description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
-            count=num_layers,
-            fusion_id=fusion_id,
+    if num_kv_heads < num_heads:
+        num_groups = num_heads // num_kv_heads
+        # GQA: Q*K -> [B, G, H, L, S]
+        ops.append(
+            create_einsum_op(
+                input_a_shape=[batch_size, num_kv_heads, num_groups, q_seqlen, d_head],
+                input_b_shape=[batch_size, num_kv_heads, kv_seqlen, d_head],
+                einsum_expr="BGHND;BGSD->BGHNS",
+                dtype=dtype,
+                memory_placement=[0, 0, 1],
+                name="MatMul: attnWeights = Q*K",
+                description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
+                count=num_layers,
+                fusion_id=fusion_id,
+            )
         )
-    )
-    ops[-1].stats.weight_size_bytes = 0      # No parameters used here.
+        ops[-1].stats.weight_size_bytes = 0
 
-    ops.append(
-        create_unary_op(
-            input_shape=[batch_size, q_seqlen, kv_seqlen, num_heads],
-            op_name="Softmax",
-            dtype=dtype,
-            memory_placement=[1, 1],
-            name="attnWeights = Softmax(attnWeights)",
-            description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
-            count=num_layers,
-            fusion_id=fusion_id,
+        ops.append(
+            create_unary_op(
+                input_shape=[batch_size, num_kv_heads, num_groups, q_seqlen, kv_seqlen],
+                op_name="Softmax",
+                dtype=dtype,
+                memory_placement=[1, 1],
+                name="attnWeights = Softmax(attnWeights)",
+                description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
+                count=num_layers,
+                fusion_id=fusion_id,
+            )
         )
-    )
-    ops.append(
-        create_einsum_op(
-            input_a_shape=[batch_size, q_seqlen, kv_seqlen, num_heads],
-            input_b_shape=[batch_size, kv_seqlen, num_heads, d_head],
-            einsum_expr="BLSN;BSND->BLND",
-            dtype=dtype,
-            memory_placement=[1, 0, 0],
-            name="MatMul: attnAvg = attnWeights * V",
-            description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
-            count=num_layers,
-            fusion_id=fusion_id,
+        ops.append(
+            create_einsum_op(
+                input_a_shape=[batch_size, num_kv_heads, num_groups, q_seqlen, kv_seqlen],
+                input_b_shape=[batch_size, num_kv_heads, kv_seqlen, d_head],
+                einsum_expr="BGHNS;BGSD->BGHND",
+                dtype=dtype,
+                memory_placement=[1, 0, 0],
+                name="MatMul: attnAvg = attnWeights * V",
+                description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
+                count=num_layers,
+                fusion_id=fusion_id,
+            )
         )
-    )
-    ops[-1].stats.weight_size_bytes = 0      # No parameters used here.
+        ops[-1].stats.weight_size_bytes = 0
+    else:
+        # MHA: original shapes
+        ops.append(
+            create_einsum_op(
+                input_a_shape=[batch_size, q_seqlen, num_heads, d_head],
+                input_b_shape=[batch_size, kv_seqlen, num_heads, d_head],
+                einsum_expr="BLND;BSND->BLSN",
+                dtype=dtype,
+                memory_placement=[0, 0, 1],
+                name="MatMul: attnWeights = Q*K",
+                description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
+                count=num_layers,
+                fusion_id=fusion_id,
+            )
+        )
+        ops[-1].stats.weight_size_bytes = 0
+
+        ops.append(
+            create_unary_op(
+                input_shape=[batch_size, q_seqlen, kv_seqlen, num_heads],
+                op_name="Softmax",
+                dtype=dtype,
+                memory_placement=[1, 1],
+                name="attnWeights = Softmax(attnWeights)",
+                description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
+                count=num_layers,
+                fusion_id=fusion_id,
+            )
+        )
+        ops.append(
+            create_einsum_op(
+                input_a_shape=[batch_size, q_seqlen, kv_seqlen, num_heads],
+                input_b_shape=[batch_size, kv_seqlen, num_heads, d_head],
+                einsum_expr="BLSN;BSND->BLND",
+                dtype=dtype,
+                memory_placement=[1, 0, 0],
+                name="MatMul: attnAvg = attnWeights * V",
+                description=(description_prefix + f"-Attention_Softmax(Q*K)*V-{fusion_id}"),
+                count=num_layers,
+                fusion_id=fusion_id,
+            )
+        )
+        ops[-1].stats.weight_size_bytes = 0
 
     ops.append(
         create_elementwise_binary_op(
@@ -2213,12 +2271,14 @@ def create_multi_head_flash_attention_block(
     dtype: str = "DT_BFLOAT16",
     fusion_id_start: int = 0,
     description_prefix: str = "",
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
+    num_kv_heads = num_kv_heads or num_heads
     ops = [
         create_multi_head_flash_attention_op(
             Q_shape=[batch_size, q_seqlen, num_heads, d_head],
-            K_shape=[batch_size, kv_seqlen, num_heads, d_head],
-            V_shape=[batch_size, kv_seqlen, num_heads, d_head],
+            K_shape=[batch_size, kv_seqlen, num_kv_heads, d_head],
+            V_shape=[batch_size, kv_seqlen, num_kv_heads, d_head],
             dtype=dtype,
             fusion_id=fusion_id_start,
             description=(description_prefix + f"-FlashAttention-{fusion_id_start}"),
@@ -2250,10 +2310,12 @@ def create_multi_head_cross_attention(
     description_prefix: str = "",
     use_flash_attention: bool = False,
     tensor_parallelism_axes: Sequence[int] = [1],
-    ici_bw_GBps: float = 900.0
+    ici_bw_GBps: float = 900.0,
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
     ops: list[Operator] = []
     fusion_id = fusion_id_start
+    num_kv_heads = num_kv_heads or num_heads
 
     ag_dim = None
     # If using tensor parallelism, need to perform an all-gather here. Each TPU takes B,S,D/t to B,S,D
@@ -2291,7 +2353,7 @@ def create_multi_head_cross_attention(
     ops.append(
         create_einsum_op(
             input_a_shape=[batch_size, kv_seqlen, d_key],
-            input_b_shape=[d_key, num_heads, d_head],
+            input_b_shape=[d_key, num_kv_heads, d_head],
             einsum_expr="BLM;MND->BLND",
             dtype=dtype,
             name="MatMul: K",
@@ -2300,11 +2362,11 @@ def create_multi_head_cross_attention(
             fusion_id=fusion_id,
         )
     )
-    # ops[-1]["Weight Size"] = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_key, d_head]))
+    # ops[-1]["Weight Size"] = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_key, d_head]))
     ops.append(
         create_einsum_op(
             input_a_shape=[batch_size, kv_seqlen, d_value],
-            input_b_shape=[d_value, num_heads, d_head],
+            input_b_shape=[d_value, num_kv_heads, d_head],
             einsum_expr="BLM;MND->BLND",
             dtype=dtype,
             name="MatMul: V",
@@ -2313,7 +2375,7 @@ def create_multi_head_cross_attention(
             fusion_id=fusion_id,
         )
     )
-    # ops[-1]["Weight Size"] = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_value, d_head]))
+    # ops[-1]["Weight Size"] = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_value, d_head]))
     fusion_id += 1
 
     # attention
@@ -2328,6 +2390,7 @@ def create_multi_head_cross_attention(
             dtype=dtype,
             fusion_id_start=fusion_id,
             description_prefix=description_prefix,
+            num_kv_heads=num_kv_heads,
         )
     else:
         ops += create_multi_head_normal_attention_block(
@@ -2340,6 +2403,7 @@ def create_multi_head_cross_attention(
             dtype=dtype,
             fusion_id_start=fusion_id,
             description_prefix=description_prefix,
+            num_kv_heads=num_kv_heads,
         )
     fusion_id = ops[-1].fusion_id + 1
 
@@ -2412,206 +2476,6 @@ def create_multi_head_cross_attention(
     return ops
 
 
-def create_multi_head_gq_attention_bwd(
-    batch_size: int,
-    input_seqlen: int,
-    output_seqlen: int,
-    decode_width: int,
-    num_heads: int,
-    d_model: int,
-    d_head: int,
-    num_layers: int,
-    dtype: str = "DT_BFLOAT16",
-    fusion_id_start: int = 0,
-    is_decode: bool = False,
-    description_prefix: str = "",
-    tensor_parallelism_degree: int = 1,
-    ici_bw_GBps: float = 900.0
-) -> list[Operator]:
-
-    num_kv_heads = 8 # TODO this is constant for our purposes but make an input anyways
-
-    ops: list[Operator] = []
-    fusion_id = fusion_id_start
-    if is_decode:  # decode
-        count = num_layers * output_seqlen
-        seqlen = decode_width
-        descript_prefix = description_prefix + "Attention-serving-decode-"
-    else:  # prefill
-        count = num_layers
-        seqlen = input_seqlen
-        descript_prefix = description_prefix + "Fwd-Attention_encoder-"
-
-    # output layer norm
-    ops.extend(
-        create_layernorm_op_bwd(
-            input_shape=[batch_size, seqlen, num_heads, d_model],
-            op_name="LayerNorm",
-            dtype=dtype,
-            name="Y_norm = LayerNorm(y)",
-            description=(descript_prefix + "Attention_layernorm"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-    # einsum combining attention scores w/ tensor
-    ops.extend(
-        create_einsum_op_bwd(
-            input_a_shape=[batch_size, num_kv_heads, num_heads, input_seqlen, input_seqlen],
-            input_b_shape=[batch_size, num_heads, input_seqlen, d_head],
-            einsum_expr="BGHNS,BHSD->BGHND",
-            dtype=dtype,
-            memory_placement=[0, 0, 0],
-            name="MatMul: similarity scores",
-            description=(descript_prefix + "Attention_output"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-    ops[-1].stats.weight_size_bytes = 0
-    # softmax
-    ops.extend(
-        create_softmax_op_bwd(
-            input_shape=[batch_size, num_kv_heads, num_heads, input_seqlen, input_seqlen], # TODO what is n vs s
-            op_name="Softmax",
-            dtype=dtype,
-            name="attnWeights = Softmax(attnWeights)",
-            description=(descript_prefix + "Softmax(Q*K)*V"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-
-    # compute similarity scores
-    ops.extend(
-        create_einsum_op_bwd(
-            input_a_shape=[batch_size, num_kv_heads, num_heads, input_seqlen, d_head],
-            input_b_shape=[batch_size, num_heads, input_seqlen, d_head],
-            einsum_expr="BGHND,BHSD->BGHNS",
-            dtype=dtype,
-            memory_placement=[0, 0, 0],
-            name="MatMul: similarity scores",
-            description=(descript_prefix + "Attention_output"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-    ops[-1].stats.weight_size_bytes = 0
-
-    return ops
-
-def create_multi_head_gq_attention(
-    batch_size: int,
-    input_seqlen: int,
-    output_seqlen: int,
-    decode_width: int,
-    num_heads: int,
-    d_model: int,
-    d_head: int,
-    num_layers: int,
-    dtype: str = "DT_BFLOAT16",
-    fusion_id_start: int = 0,
-    is_decode: bool = False,
-    description_prefix: str = "",
-    tensor_parallelism_degree: int = 1,
-    ici_bw_GBps: float = 900.0
-) -> list[Operator]:
-    ops: list[Operator] = []
-    fusion_id = fusion_id_start
-    if is_decode:  # decode
-        count = num_layers * output_seqlen
-        seqlen = decode_width
-        descript_prefix = description_prefix + "Attention-serving-decode-"
-    else:  # prefill
-        count = num_layers
-        seqlen = input_seqlen
-        descript_prefix = description_prefix + "Fwd-Attention_encoder-"
-
-    # scaled dot product gqa (this is single head)
-    # [
-    # Einstein notation:
-    # - b: batch size
-    # - n / s: sequence length
-    # - h: number of heads
-    # - g: number of groups
-    num_kv_heads = 8
-    # - d: dimension of query/key/value
-    # # compute similarity (big einsum)
-    # similarity = einsum(query, key, "b g h n d, b h s d -> b g h n s")
-    ops.append(
-        create_einsum_op(
-            input_a_shape=[batch_size, num_kv_heads, num_heads, input_seqlen, d_head],
-            input_b_shape=[batch_size, num_heads, input_seqlen, d_head],
-            einsum_expr="BGHND,BHSD->BGHNS",
-            dtype=dtype,
-            memory_placement=[0, 0, 0],
-            name="MatMul: similarity scores",
-            description=(descript_prefix + "Attention_output"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-    ops[-1].stats.weight_size_bytes = 0
-    # ops[-1]["Weight Size"] = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_head, d_model]))
-    fusion_id = ops[-1].fusion_id + 1
-    mask = None
-    if is_decode: # decode (causal)
-        # mask out ones
-        pass
-    # extend mask based on inputs (both decode, prefill)
-
-    # softmax
-    ops.append(
-        create_unary_op(
-            input_shape=[batch_size, num_kv_heads, num_heads, input_seqlen, input_seqlen], # TODO what is n vs s
-            op_name="Softmax",
-            dtype=dtype,
-            name="attnWeights = Softmax(attnWeights)",
-            description=(descript_prefix + "Softmax(Q*K)*V"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-
-    # dropout (Nop? )
-
-    # einsum (combine attn w tensor)
-    # out = einsum(attention, value, "b g h n s, b h s d -> b g h n d")
-    ops.append(
-        create_einsum_op(
-            input_a_shape=[batch_size, num_kv_heads, num_heads, input_seqlen, input_seqlen],
-            input_b_shape=[batch_size, num_heads, input_seqlen, d_head],
-            einsum_expr="BGHNS,BHSD->BGHND",
-            dtype=dtype,
-            memory_placement=[0, 0, 0],
-            name="MatMul: similarity scores",
-            description=(descript_prefix + "Attention_output"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-    ops[-1].stats.weight_size_bytes = 0
-
-    # ]
-
-    # layer norm
-    # BNHD
-    ops.append(
-        create_unary_op(
-            input_shape=[batch_size, seqlen, num_heads, d_model],
-            op_name="LayerNorm",
-            dtype=dtype,
-            name="Y_norm = LayerNorm(y)",
-            description=(descript_prefix + "Attention_layernorm"),
-            count=count,
-            fusion_id=fusion_id,
-        )
-    )
-    # output projection (noP? )
-
-    return ops
-
-
 def create_multi_head_self_attention_bwd(
     batch_size: int,
     input_seqlen: int,
@@ -2627,11 +2491,16 @@ def create_multi_head_self_attention_bwd(
     description_prefix: str = "",
     tensor_parallelism_axes: Sequence[int] = [1],
     ici_bw_GBps: float = 900.0,
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
     ops: list[Operator] = []
     fusion_id = fusion_id_start
     count = num_layers
     seqlen = input_seqlen
+    num_kv_heads = num_kv_heads or num_heads
+    use_gqa = num_kv_heads < num_heads
+    if use_gqa:
+        num_groups = num_heads // num_kv_heads
     tensor_parallelism_degree = int(np.prod(tensor_parallelism_axes))
     descript_prefix = description_prefix + "Bwd-Attention_encoder-"
 
@@ -2648,6 +2517,7 @@ def create_multi_head_self_attention_bwd(
     )
     fusion_id = ops[-1].fusion_id + 1
 
+    # Output proj bwd: unchanged (uses full num_heads)
     ops.extend(
         create_einsum_op_bwd(
             input_a_shape=[batch_size, seqlen, num_heads, d_head],
@@ -2661,57 +2531,104 @@ def create_multi_head_self_attention_bwd(
             fusion_id=fusion_id,
         )
     )
-    # TODO should I be overwriting?
-    # ops[-1]["Weight Size"] = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_head, d_model]))
     fusion_id = ops[-1].fusion_id + 1
 
-    # TODO BW of elementwise add
-
-    ops.extend(
-        create_einsum_op_bwd(
-            input_a_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
-            input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
-            einsum_expr="BLSN;BSND->BLND",
-            dtype=dtype,
-            memory_placement=[1, 0, 0],
-            name="MatMul: attnAvg (2) = attnWeights (2) * V_all_gathered (2)",
-            description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
-            count=count,
-            fusion_id=fusion_id,
+    if use_gqa:
+        # Attn*V bwd: GQA shapes
+        ops.extend(
+            create_einsum_op_bwd(
+                input_a_shape=[batch_size, num_kv_heads, num_groups, input_seqlen, input_seqlen],
+                input_b_shape=[batch_size, num_kv_heads, input_seqlen, d_head],
+                einsum_expr="BGHNS;BGSD->BGHND",
+                dtype=dtype,
+                memory_placement=[1, 0, 0],
+                name="MatMul: attnAvg (2) = attnWeights (2) * V_all_gathered (2)",
+                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                count=count,
+                fusion_id=fusion_id,
+            )
         )
-    )
-    ops[-2].stats.weight_size_bytes = 0 # No weights for (QK)*V
-    ops[-1].stats.weight_size_bytes = 0
+        ops[-2].stats.weight_size_bytes = 0
+        ops[-1].stats.weight_size_bytes = 0
 
-    ops.extend(
-        create_softmax_op_bwd(
-            input_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
-            op_name="Softmax",
-            dtype=dtype,
-            memory_placement=[1, 1],
-            name="attnWeights = Softmax(attnWeights)",
-            description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
-            count=count,
-            fusion_id=fusion_id,
+        # Softmax bwd: GQA shape
+        ops.extend(
+            create_softmax_op_bwd(
+                input_shape=[batch_size, num_kv_heads, num_groups, input_seqlen, input_seqlen],
+                op_name="Softmax",
+                dtype=dtype,
+                memory_placement=[1, 1],
+                name="attnWeights = Softmax(attnWeights)",
+                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                count=count,
+                fusion_id=fusion_id,
+            )
         )
-    )
-    ops[-1].stats.weight_size_bytes = 0 # TODO is this even necessary? -> since it's a softmax...
+        ops[-1].stats.weight_size_bytes = 0
 
-    ops.extend(
-        create_einsum_op_bwd(
-            input_a_shape=[batch_size, input_seqlen, num_heads, d_head],
-            input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
-            einsum_expr="BLND;BSND->BLSN", # L = S
-            dtype=dtype,
-            memory_placement=[0, 0, 1],
-            name="MatMul: attnWeights (2) = Q (2) * K_all_gathered (2)",
-            description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
-            count=count,
-            fusion_id=fusion_id,
+        # QK bwd: GQA shapes
+        ops.extend(
+            create_einsum_op_bwd(
+                input_a_shape=[batch_size, num_kv_heads, num_groups, input_seqlen, d_head],
+                input_b_shape=[batch_size, num_kv_heads, input_seqlen, d_head],
+                einsum_expr="BGHND;BGSD->BGHNS",
+                dtype=dtype,
+                memory_placement=[0, 0, 1],
+                name="MatMul: attnWeights (2) = Q (2) * K_all_gathered (2)",
+                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                count=count,
+                fusion_id=fusion_id,
+            )
         )
-    )
-    ops[-2].stats.weight_size_bytes = 0
-    ops[-1].stats.weight_size_bytes = 0
+        ops[-2].stats.weight_size_bytes = 0
+        ops[-1].stats.weight_size_bytes = 0
+    else:
+        # Attn*V bwd: MHA shapes
+        ops.extend(
+            create_einsum_op_bwd(
+                input_a_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
+                input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
+                einsum_expr="BLSN;BSND->BLND",
+                dtype=dtype,
+                memory_placement=[1, 0, 0],
+                name="MatMul: attnAvg (2) = attnWeights (2) * V_all_gathered (2)",
+                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                count=count,
+                fusion_id=fusion_id,
+            )
+        )
+        ops[-2].stats.weight_size_bytes = 0
+        ops[-1].stats.weight_size_bytes = 0
+
+        ops.extend(
+            create_softmax_op_bwd(
+                input_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
+                op_name="Softmax",
+                dtype=dtype,
+                memory_placement=[1, 1],
+                name="attnWeights = Softmax(attnWeights)",
+                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                count=count,
+                fusion_id=fusion_id,
+            )
+        )
+        ops[-1].stats.weight_size_bytes = 0
+
+        ops.extend(
+            create_einsum_op_bwd(
+                input_a_shape=[batch_size, input_seqlen, num_heads, d_head],
+                input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
+                einsum_expr="BLND;BSND->BLSN", # L = S
+                dtype=dtype,
+                memory_placement=[0, 0, 1],
+                name="MatMul: attnWeights (2) = Q (2) * K_all_gathered (2)",
+                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                count=count,
+                fusion_id=fusion_id,
+            )
+        )
+        ops[-2].stats.weight_size_bytes = 0
+        ops[-1].stats.weight_size_bytes = 0
 
     # Q, K, V via Wq, Wk, Wv -> all @ same fusion idx
     ops.extend(
@@ -2732,7 +2649,7 @@ def create_multi_head_self_attention_bwd(
     ops.extend(
         create_einsum_op_bwd(
             input_a_shape=[batch_size, input_seqlen, d_model],
-            input_b_shape=[d_model, num_heads, d_head],
+            input_b_shape=[d_model, num_kv_heads, d_head],
             einsum_expr="BLM;MND->BLND",
             dtype=dtype,
             name="MatMul: K (2) = x_norm_all_gathered (2) * W_k (1)",
@@ -2741,13 +2658,13 @@ def create_multi_head_self_attention_bwd(
             fusion_id=fusion_id,
         )
     )
-    ops[-2].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_model, d_head]))
-    ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_model, d_head]))
+    ops[-2].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_model, d_head]))
+    ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_model, d_head]))
 
     ops.extend(
         create_einsum_op_bwd(
             input_a_shape=[batch_size, input_seqlen, d_model],
-            input_b_shape=[d_model, num_heads, d_head],
+            input_b_shape=[d_model, num_kv_heads, d_head],
             einsum_expr="BLM;MND->BLND",
             dtype=dtype,
             name="MatMul: V (2) = x_norm_all_gathered (2) * W_v (1)",
@@ -2756,8 +2673,8 @@ def create_multi_head_self_attention_bwd(
             fusion_id=fusion_id,
         )
     )
-    ops[-2].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_model, d_head]))
-    ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_model, d_head]))
+    ops[-2].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_model, d_head]))
+    ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_model, d_head]))
 
     fusion_id = ops[-1].fusion_id + 1
 
@@ -2793,10 +2710,16 @@ def create_multi_head_self_attention(
     is_decode: bool = False,
     description_prefix: str = "",
     tensor_parallelism_axes: Sequence[int] = [1],
-    ici_bw_GBps: float = 900.0
+    ici_bw_GBps: float = 900.0,
+    num_kv_heads: int | None = None,
 ) -> list[Operator]:
     ops: list[Operator] = []
     fusion_id = fusion_id_start
+    num_kv_heads = num_kv_heads or num_heads
+    use_gqa = num_kv_heads < num_heads
+    if use_gqa:
+        num_groups = num_heads // num_kv_heads
+
     if is_decode:  # decode
         count = num_layers * output_seqlen
         seqlen = decode_width
@@ -2841,7 +2764,7 @@ def create_multi_head_self_attention(
         ops.append(
             create_einsum_op(
                 input_a_shape=[batch_size, decode_width, d_model],
-                input_b_shape=[2, d_model, num_heads, d_head],
+                input_b_shape=[2, d_model, num_kv_heads, d_head],
                 einsum_expr="BLM;TMND->BTLND",
                 dtype=dtype,
                 name="MatMul: KV (2) = x_norm (2) * W_kv (1)",
@@ -2850,12 +2773,12 @@ def create_multi_head_self_attention(
                 fusion_id=fusion_id,
             )
         )
-        ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([2, num_heads, d_model, d_head]))
+        ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([2, num_kv_heads, d_model, d_head]))
     else:  # prefill
         ops.append(
             create_einsum_op(
                 input_a_shape=[batch_size, input_seqlen, d_model],
-                input_b_shape=[d_model, num_heads, d_head],
+                input_b_shape=[d_model, num_kv_heads, d_head],
                 einsum_expr="BLM;MND->BLND",
                 dtype=dtype,
                 name="MatMul: K (2) = x_norm_all_gathered (2) * W_k (1)",
@@ -2864,11 +2787,11 @@ def create_multi_head_self_attention(
                 fusion_id=fusion_id,
             )
         )
-        ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_model, d_head]))
+        ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_model, d_head]))
         ops.append(
             create_einsum_op(
                 input_a_shape=[batch_size, input_seqlen, d_model],
-                input_b_shape=[d_model, num_heads, d_head],
+                input_b_shape=[d_model, num_kv_heads, d_head],
                 einsum_expr="BLM;MND->BLND",
                 dtype=dtype,
                 name="MatMul: V (2) = x_norm_all_gathered (2) * W_v (1)",
@@ -2877,115 +2800,228 @@ def create_multi_head_self_attention(
                 fusion_id=fusion_id,
             )
         )
-        ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_heads, d_model, d_head]))
+        ops[-1].stats.weight_size_bytes = util.get_size_bytes_from_dtype(dtype) * int(np.prod([num_kv_heads, d_model, d_head]))
     fusion_id += 1
     if is_decode:  # use KV cache for decode stage
-        ops.append(
-            create_einsum_op(
-                input_a_shape=[batch_size, decode_width, num_heads, d_head],
-                input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
-                einsum_expr="BLND;BSND->BLSN",
-                dtype=dtype,
-                name="MatMul: QK_prefix (2) = Q (2) * Kcache (2)",
-                description=(descript_prefix + "Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+        if use_gqa:
+            # GQA decode: Q*K -> [B, G, H, L, S]
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, num_kv_heads, num_groups, decode_width, d_head],
+                    input_b_shape=[batch_size, num_kv_heads, input_seqlen, d_head],
+                    einsum_expr="BGHND;BGSD->BGHNS",
+                    dtype=dtype,
+                    name="MatMul: QK_prefix (2) = Q (2) * Kcache (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
-        ops.append(
-            create_einsum_op(
-                input_a_shape=[batch_size, decode_width, num_heads, d_head],
-                input_b_shape=[batch_size, output_seqlen, num_heads, d_head],
-                einsum_expr="BLND;BSND->BLSN",
-                dtype=dtype,
-                name="MatMul: QK_suffix (2) = Q (2) * Ksuffix (2)",
-                description=(descript_prefix + "Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, num_kv_heads, num_groups, decode_width, d_head],
+                    input_b_shape=[batch_size, num_kv_heads, output_seqlen, d_head],
+                    einsum_expr="BGHND;BGSD->BGHNS",
+                    dtype=dtype,
+                    name="MatMul: QK_suffix (2) = Q (2) * Ksuffix (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
-        ops.append(
-            create_unary_op(
-                input_shape=[batch_size, decode_width, input_seqlen + output_seqlen, num_heads],
-                op_name="Softmax",
-                dtype=dtype,
-                name="attnWeights = Softmax(attnWeights)",
-                description=(descript_prefix + "Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_unary_op(
+                    input_shape=[batch_size, num_kv_heads, num_groups, decode_width, input_seqlen + output_seqlen],
+                    op_name="Softmax",
+                    dtype=dtype,
+                    name="attnWeights = Softmax(attnWeights)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
-        ops.append(
-            create_einsum_op(
-                input_a_shape=[batch_size, decode_width, input_seqlen, num_heads],
-                input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
-                einsum_expr="BLSN;BSND->BLND",
-                dtype=dtype,
-                name="MatMul: attn_avg_prefix (2) = QK_prefix (2) * Vcache (2)",
-                description=(descript_prefix + "Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, num_kv_heads, num_groups, decode_width, input_seqlen],
+                    input_b_shape=[batch_size, num_kv_heads, input_seqlen, d_head],
+                    einsum_expr="BGHNS;BGSD->BGHND",
+                    dtype=dtype,
+                    name="MatMul: attn_avg_prefix (2) = QK_prefix (2) * Vcache (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
-        ops.append(
-            create_einsum_op(
-                input_a_shape=[batch_size, decode_width, output_seqlen, num_heads],
-                input_b_shape=[batch_size, output_seqlen, num_heads, d_head],
-                einsum_expr="BLSN;BSND->BLND",
-                dtype=dtype,
-                name="MatMul: attn_avg_suffix (2) = QK_suffix (2) * Vsuffix (2)",
-                description=(descript_prefix + "Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, num_kv_heads, num_groups, decode_width, output_seqlen],
+                    input_b_shape=[batch_size, num_kv_heads, output_seqlen, d_head],
+                    einsum_expr="BGHNS;BGSD->BGHND",
+                    dtype=dtype,
+                    name="MatMul: attn_avg_suffix (2) = QK_suffix (2) * Vsuffix (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
+            ops[-1].stats.weight_size_bytes = 0
+        else:
+            # MHA decode: original shapes
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, decode_width, num_heads, d_head],
+                    input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
+                    einsum_expr="BLND;BSND->BLSN",
+                    dtype=dtype,
+                    name="MatMul: QK_prefix (2) = Q (2) * Kcache (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, decode_width, num_heads, d_head],
+                    input_b_shape=[batch_size, output_seqlen, num_heads, d_head],
+                    einsum_expr="BLND;BSND->BLSN",
+                    dtype=dtype,
+                    name="MatMul: QK_suffix (2) = Q (2) * Ksuffix (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_unary_op(
+                    input_shape=[batch_size, decode_width, input_seqlen + output_seqlen, num_heads],
+                    op_name="Softmax",
+                    dtype=dtype,
+                    name="attnWeights = Softmax(attnWeights)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, decode_width, input_seqlen, num_heads],
+                    input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
+                    einsum_expr="BLSN;BSND->BLND",
+                    dtype=dtype,
+                    name="MatMul: attn_avg_prefix (2) = QK_prefix (2) * Vcache (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, decode_width, output_seqlen, num_heads],
+                    input_b_shape=[batch_size, output_seqlen, num_heads, d_head],
+                    einsum_expr="BLSN;BSND->BLND",
+                    dtype=dtype,
+                    name="MatMul: attn_avg_suffix (2) = QK_suffix (2) * Vsuffix (2)",
+                    description=(descript_prefix + "Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
     else:  # prefill
-        ops.append(
-            create_einsum_op(
-                input_a_shape=[batch_size, input_seqlen, num_heads, d_head],
-                input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
-                einsum_expr="BLND;BSND->BLSN",
-                dtype=dtype,
-                memory_placement=[0, 0, 1],
-                name="MatMul: attnWeights (2) = Q (2) * K_all_gathered (2)",
-                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+        if use_gqa:
+            # GQA prefill: Q*K -> [B, G, H, L, S]
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, num_kv_heads, num_groups, input_seqlen, d_head],
+                    input_b_shape=[batch_size, num_kv_heads, input_seqlen, d_head],
+                    einsum_expr="BGHND;BGSD->BGHNS",
+                    dtype=dtype,
+                    memory_placement=[0, 0, 1],
+                    name="MatMul: attnWeights (2) = Q (2) * K_all_gathered (2)",
+                    description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
-        ops.append(
-            create_unary_op(
-                input_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
-                op_name="Softmax",
-                dtype=dtype,
-                memory_placement=[1, 1],
-                name="attnWeights = Softmax(attnWeights)",
-                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_unary_op(
+                    input_shape=[batch_size, num_kv_heads, num_groups, input_seqlen, input_seqlen],
+                    op_name="Softmax",
+                    dtype=dtype,
+                    memory_placement=[1, 1],
+                    name="attnWeights = Softmax(attnWeights)",
+                    description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
-        ops.append(
-            create_einsum_op(
-                input_a_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
-                input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
-                einsum_expr="BLSN;BSND->BLND",
-                dtype=dtype,
-                memory_placement=[1, 0, 0],
-                name="MatMul: attnAvg (2) = attnWeights (2) * V_all_gathered (2)",
-                description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
-                count=count,
-                fusion_id=fusion_id,
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, num_kv_heads, num_groups, input_seqlen, input_seqlen],
+                    input_b_shape=[batch_size, num_kv_heads, input_seqlen, d_head],
+                    einsum_expr="BGHNS;BGSD->BGHND",
+                    dtype=dtype,
+                    memory_placement=[1, 0, 0],
+                    name="MatMul: attnAvg (2) = attnWeights (2) * V_all_gathered (2)",
+                    description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
             )
-        )
-        ops[-1].stats.weight_size_bytes = 0
+            ops[-1].stats.weight_size_bytes = 0
+        else:
+            # MHA prefill: original shapes
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, input_seqlen, num_heads, d_head],
+                    input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
+                    einsum_expr="BLND;BSND->BLSN",
+                    dtype=dtype,
+                    memory_placement=[0, 0, 1],
+                    name="MatMul: attnWeights (2) = Q (2) * K_all_gathered (2)",
+                    description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_unary_op(
+                    input_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
+                    op_name="Softmax",
+                    dtype=dtype,
+                    memory_placement=[1, 1],
+                    name="attnWeights = Softmax(attnWeights)",
+                    description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
+            ops.append(
+                create_einsum_op(
+                    input_a_shape=[batch_size, input_seqlen, input_seqlen, num_heads],
+                    input_b_shape=[batch_size, input_seqlen, num_heads, d_head],
+                    einsum_expr="BLSN;BSND->BLND",
+                    dtype=dtype,
+                    memory_placement=[1, 0, 0],
+                    name="MatMul: attnAvg (2) = attnWeights (2) * V_all_gathered (2)",
+                    description=(descript_prefix + "Attention_Softmax(Q*K)*V"),
+                    count=count,
+                    fusion_id=fusion_id,
+                )
+            )
+            ops[-1].stats.weight_size_bytes = 0
     ops.append(
         create_elementwise_binary_op(
             input_shape=[batch_size, seqlen, num_heads, d_head],

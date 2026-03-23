@@ -316,6 +316,7 @@ class LLMOpsGenerator(LLMOpsGeneratorBase):
             use_flash_attention=self.use_flash_attention,
             tensor_parallelism_axes=self.tensor_parallelism_axes,
             ici_bw_GBps=self.tp_ici_bw_GBps,
+            num_kv_heads=self.num_kv_heads,
         )
         fusion_id = ops[-1].fusion_id + 1
         ops += ops_lib.create_ffn(
@@ -475,6 +476,7 @@ class LLMOpsGenerator(LLMOpsGeneratorBase):
             tensor_parallelism_axes=self.tensor_parallelism_axes,
             is_decode=True,
             ici_bw_GBps=self.tp_ici_bw_GBps,
+            num_kv_heads=self.num_kv_heads,
         )
         fusion_id = ops[-1].fusion_id + 1
         ops += ops_lib.create_ffn(
@@ -663,6 +665,7 @@ class LLMOpsGeneratorTraining(LLMOpsGeneratorBase):
             use_flash_attention=self.use_flash_attention,
             tensor_parallelism_axes=self.tensor_parallelism_axes,
             ici_bw_GBps=self.tp_ici_bw_GBps,
+            num_kv_heads=self.num_kv_heads,
         )
         fusion_id = ops[-1].fusion_id + 1
         ops += ops_lib.create_ffn(
@@ -794,6 +797,7 @@ class LLMOpsGeneratorTraining(LLMOpsGeneratorBase):
             use_flash_attention=self.use_flash_attention,
             tensor_parallelism_axes=self.tensor_parallelism_axes,
             ici_bw_GBps=self.tp_ici_bw_GBps,
+            num_kv_heads=self.num_kv_heads,
         )
         fusion_id = ops[-1].fusion_id + 1
 
