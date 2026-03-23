@@ -93,7 +93,7 @@ The script `neusim/run_scripts/run_sim.py` automatically supports new configurat
 - `--versions`: specify the NPU chip versions. For example, if the user adds a new chip configuration file `configs/chips/tpuv7.json`, the user can specify `--versions="7"` to run simulations for this NPU version.
 
 #### Power Simulation Parameters
-The power gating parameters are defined in `neusim/npusim/frontend/power_analysis_lib.py`. The user can modify the `get_power_gating_config()` function to add new power gating configurations, including power gating wake-up cycles and power gating policies for each component.
+The power gating parameters are defined in `neusim/configs/power_gating/PowerGatingConfig.py`. The user can modify the `get_power_gating_config()` function to add new power gating configurations, including power gating wake-up cycles and power gating policies for each component.
 
 The scripts `neusim/run_scripts/energy_operator_analysis_main.py` and `neusim/run_scripts/carbon_analysis_main.py` can be invoked with command line arguments.
 The `--help` option shows all available options. To perform sensitivity study for power gating parameters, these two scripts support overriding the default power gating configurations via the `--power_gating_strategy` flag as follows:
@@ -104,7 +104,7 @@ The `--help` option shows all available options. To perform sensitivity study fo
 - `<base_config>_vary_PG_delay_<value>`: vary power gating wake-up delay for sensitivity analysis. The value is specified as the ratio over the base config.
 
 See `neusim/run_scripts/run_power_gating_sensitivity_analysis.sh` for examples of how to specify different power gating strategies via the `--power_gating_strategy` flag.
-See `neusim/npusim/frontend/power_analysis_lib.py:get_power_gating_config()` for how these parameters are being handled by NeuSim internally.
+See `neusim/configs/power_gating/PowerGatingConfig.py:get_power_gating_config()` for how these parameters are being handled by NeuSim internally.
 
 ### Running a Single Tensor Operator
 Please see `neusim/run_scripts/run_single_op_main.py` for an example of how to run a single tensor operator simulation. This script is helpful for analyzing a specific operator of interest rather than simulating the entire DNN model.

@@ -16,9 +16,10 @@ The NeuSim codebase is organized as follows:
         - `chips/`: Chip configuration classes.
         - `models/`: Model configuration classes.
         - `systems/`: System configuration classes.
+        - `power_gating/`: Power gating configuration class and named presets.
     - **`npusim/`**: The core simulator logic.
-        - `backend/`: Backend performance simulation logic.
-        - `frontend/`: Ops generators (defining DNN model graphs) and power modeling.
+        - `backend/`: Core performance and power simulation logic (execution time modeling, energy modeling, DVFS policy and power lookup).
+        - `frontend/`: Ops generators (defining DNN model graphs), orchestration wrappers, and backward-compatible re-export facades.
     - **`run_scripts/`**: Scripts for running simulations, analysis, and examples.
     - **`xla_hlo_parser/`**: XLA-style program parser and analyzer framework. Used in NeuSim backend for analyzing operator semantics. This module may be refactored into the backend in future releases.
 
