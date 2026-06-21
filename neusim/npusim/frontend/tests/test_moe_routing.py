@@ -82,6 +82,20 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         self.assertGreater(skew, 1.0)
         self.assertAlmostEqual(skew, 120832 / 65280)
 
+    def test_skew_uses_ceil_experts_per_group_when_ep_indivisible(self):
+        # When EP does not divide E, the hottest group holds ceil(E/EP) experts.
+        # E=10, K=2, EP=3, f=-1 (->E/K=5), W=1: experts_per_group=ceil(10/3)=4,
+        #   eff_real=T*K/2, rem_real=(T*K/2)/9,
+        #   hot_group = eff_real + 3*rem_real = (1/2 + 1/6)*T*K = (2/3)*T*K,
+        #   avg_group = T*K/3 -> skew = 2.0. (Floored E//EP=3 would give 11/6 ~= 1.833.)
+        config = MoELLMConfig(
+            all_to_all_load_imbalance_aware=True,
+            num_routed_experts=10,
+            num_activated_routed_experts_per_token=2,
+        )
+        skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=64, expert_parallelism_degree=3)
+        self.assertAlmostEqual(skew, 2.0)
+
     def test_skew_never_below_one(self):
         config = MoELLMConfig(all_to_all_load_imbalance_aware=True)
         for ep in (2, 4, 8, 16):
@@ -100,6 +114,23 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         )
         skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=256, expert_parallelism_degree=8)
         self.assertAlmostEqual(skew, 4 / 3)
+
+
+class TestExpertsOnWorstCaseDevice(unittest.TestCase):
+    def test_divisible(self):
+        self.assertEqual(llm_ops_lib._num_experts_on_worst_case_device(256, 8), 32)
+        self.assertEqual(llm_ops_lib._num_experts_on_worst_case_device(256, 1), 256)
+
+    def test_indivisible_rounds_up(self):
+        # ceil(10/3) = 4, not floor 3 (which would drop the remainder experts).
+        self.assertEqual(llm_ops_lib._num_experts_on_worst_case_device(10, 3), 4)
+        self.assertEqual(llm_ops_lib._num_experts_on_worst_case_device(256, 7), 37)
+
+    def test_more_groups_than_experts_gives_at_least_one(self):
+        # EP > E must model 1 expert on the busiest device, never 0 (which would
+        # silently zero out MoE compute).
+        self.assertEqual(llm_ops_lib._num_experts_on_worst_case_device(8, 16), 1)
+        self.assertEqual(llm_ops_lib._num_experts_on_worst_case_device(256, 512), 1)
 
 
 class TestAllToAllReceiverSkewScaling(unittest.TestCase):

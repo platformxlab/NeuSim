@@ -1319,6 +1319,21 @@ def create_all_to_all_op(
     return final_op
 
 
+def _num_experts_on_worst_case_device(
+    num_routed_experts: int, expert_parallelism_degree: int
+) -> int:
+    '''
+    Number of routed experts on the most-loaded (worst-case) EP device/group.
+
+    Shared by both the all-to-all skew model (_all_to_all_receiver_skew) and the
+    expert-compute model (create_ffn_deepseek_moe) so the two stay consistent.
+    When experts are spread as evenly as possible across EP groups, the busiest
+    group holds ceil(E / EP) experts -- using floor (E // EP) would drop the
+    remainder when EP does not divide E, and would model ZERO experts when EP > E.
+    '''
+    return ceil(num_routed_experts / max(1, expert_parallelism_degree))
+
+
 def _all_to_all_receiver_skew(
     config, total_tokens: int, expert_parallelism_degree: int
 ) -> float:
@@ -1351,7 +1366,8 @@ def _all_to_all_receiver_skew(
     total_routings = total_tokens * K
     if total_routings <= 0:
         return 1.0
-    experts_per_group = E / expert_parallelism_degree
+    # Same worst-case-device expert count the compute model uses (ceil(E/EP)).
+    experts_per_group = _num_experts_on_worst_case_device(E, expert_parallelism_degree)
     # W hot experts each at eff_real real tokens; the hottest EP group holds up to W.
     W = max(1, min(getattr(config, "num_worst_case_experts", 1), K))
     W_group = min(W, experts_per_group)
@@ -3603,7 +3619,9 @@ def create_ffn_deepseek_moe(
     E = config.num_routed_experts
     K = config.num_activated_routed_experts_per_token
     f = config.effective_expert_load_imbalance_factor
-    E_per_device = E // expert_parallelism_degree
+    # Worst-case device holds ceil(E/EP) experts (shared with the skew model so the
+    # latency and compute models agree; >= 1 even when EP > E).
+    E_per_device = _num_experts_on_worst_case_device(E, expert_parallelism_degree)
     W = max(1, min(config.num_worst_case_experts, K))
     W_dev = min(W, E_per_device)  # hot experts that land on the worst-case device
     total_tokens = batch_size * seqlen

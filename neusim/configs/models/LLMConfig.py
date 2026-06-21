@@ -121,6 +121,13 @@ class MoELLMConfig(LLMConfig):
 
     Range [1, K]. Increasing W concentrates the load onto fewer experts, so a device
     holding the hot set spends proportionally more time on worst-case experts.
+
+    NOTE: W only sets HOW MANY experts are hot; the per-hot-expert load is governed
+    solely by expert_load_imbalance_factor (f) via get_effective_expert_tokens. The
+    "W = K -> each hot expert receives all T tokens" absolute-worst-case above holds
+    only when f is also at its maximum E/K (the default f = -1.0 sentinel resolves to
+    exactly that). With a smaller f, W = K still gives only T*K/E*f tokens per hot
+    expert, not T -- raise f together with W to model the absolute worst case.
     '''
 
     expert_parallelism_degree: int = 1
@@ -173,6 +180,15 @@ class MoELLMConfig(LLMConfig):
 
     @model_validator(mode='after')
     def _validate_expert_load_imbalance_factor(self) -> 'MoELLMConfig':
+        # Guard the E/K divisions below (and in get_effective_expert_tokens /
+        # effective_expert_load_imbalance_factor) so a degenerate config fails with a
+        # clear message instead of a bare ZeroDivisionError.
+        if self.num_routed_experts <= 0 or self.num_activated_routed_experts_per_token <= 0:
+            raise ValueError(
+                "num_routed_experts and num_activated_routed_experts_per_token must both "
+                f"be >= 1. Got num_routed_experts={self.num_routed_experts}, "
+                f"num_activated_routed_experts_per_token={self.num_activated_routed_experts_per_token}."
+            )
         f = self.expert_load_imbalance_factor
         max_f = self.num_routed_experts / self.num_activated_routed_experts_per_token
         if f != -1.0 and not (1.0 <= f <= max_f):
@@ -221,6 +237,11 @@ class MoELLMConfig(LLMConfig):
                 self.microbatch_size_dcn,
                 self.microbatch_size_ici,
                 self.global_batch_size,
+                # Load-imbalance fields change the generated op graph, so configs that
+                # differ only in these must not collide on the config hash.
+                self.expert_load_imbalance_factor,
+                self.all_to_all_load_imbalance_aware,
+                self.num_worst_case_experts,
             )
         )
 

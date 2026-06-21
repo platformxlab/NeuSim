@@ -115,6 +115,27 @@ class TestMoELLMConfig(unittest.TestCase):
         MoELLMConfig(num_worst_case_experts=1)
         MoELLMConfig(num_worst_case_experts=8)
 
+    def test_degenerate_expert_counts_raise_value_error(self):
+        # K=0 or E=0 would otherwise hit a bare ZeroDivisionError in the E/K division;
+        # the validator must surface a clear ValueError instead.
+        with self.assertRaises(ValueError):
+            MoELLMConfig(num_activated_routed_experts_per_token=0)
+        with self.assertRaises(ValueError):
+            MoELLMConfig(num_routed_experts=0)
+
+    def test_hash_distinguishes_load_imbalance_fields(self):
+        # The new fields change the generated op graph, so configs differing only in
+        # them must not collide on the config hash.
+        base = MoELLMConfig()
+        self.assertNotEqual(hash(base), hash(MoELLMConfig(expert_load_imbalance_factor=2.0)))
+        self.assertNotEqual(hash(base), hash(MoELLMConfig(num_worst_case_experts=4)))
+        self.assertNotEqual(hash(base), hash(MoELLMConfig(all_to_all_load_imbalance_aware=True)))
+        # Two configs with identical fields still hash equal.
+        self.assertEqual(
+            hash(MoELLMConfig(expert_load_imbalance_factor=2.0)),
+            hash(MoELLMConfig(expert_load_imbalance_factor=2.0)),
+        )
+
 class TestDeepSeekConfig(unittest.TestCase):
     def test_deepseek_config(self):
         config = DeepSeekConfig(
