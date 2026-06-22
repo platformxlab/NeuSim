@@ -1343,10 +1343,12 @@ def _all_to_all_receiver_skew(
 
     Under skew, the EP group holding the most-loaded expert receives (dispatch) /
     sends (combine) disproportionate traffic and bottlenecks the exchange, so the
-    all-to-all completion time scales by this factor. Returns 1.0 (balanced model)
-    when expert parallelism is off, the model is non-MoE, or the
-    all_to_all_load_imbalance_aware flag is False. Range: [1, E/K]
-    (1 at EP=1; up to E/K when each expert is its own EP group).
+    all-to-all completion time scales by this factor. The MoE all-to-all is always
+    modeled with this skew; it degrades to 1.0 (balanced model) when expert
+    parallelism is off, the model is non-MoE, or the load is balanced
+    (expert_load_imbalance_factor = 1.0). Range: [1, E/K] (1 at EP=1; up to E/K
+    when each expert is its own EP group). The default factor sentinel (-1.0)
+    resolves to the E/K worst case, matching the compute path's default.
 
     The per-expert token loads are kept in REAL (un-floored) units here: the skew
     is a ratio of traffic, so a perfectly balanced load (f=1.0) must yield exactly
@@ -1356,8 +1358,6 @@ def _all_to_all_receiver_skew(
     therefore belongs only to the matmul seqlen, not to this ratio.
     '''
     if expert_parallelism_degree <= 1:
-        return 1.0
-    if not getattr(config, "all_to_all_load_imbalance_aware", False):
         return 1.0
     E = config.num_routed_experts
     K = config.num_activated_routed_experts_per_token
@@ -3572,7 +3572,7 @@ def create_ffn_deepseek_moe(
     bisection_bw = None
     # Under expert load imbalance the dispatch/combine all-to-all becomes an
     # incast/outcast on the hottest EP group; scale latency by the receiver skew
-    # (1.0 when balanced or when all_to_all_load_imbalance_aware is disabled).
+    # (1.0 when EP is off or the load is balanced, f=1.0).
     a2a_skew = _all_to_all_receiver_skew(
         config, batch_size * seqlen, expert_parallelism_degree
     )

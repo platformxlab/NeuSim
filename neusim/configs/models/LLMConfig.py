@@ -97,15 +97,6 @@ class MoELLMConfig(LLMConfig):
         effective_tokens = max(1, ceil(T * K / E * f))
     '''
 
-    all_to_all_load_imbalance_aware: bool = False
-    '''
-    If True, scale the MoE dispatch/combine all-to-all latency by a receiver
-    "incast" skew factor derived from expert_load_imbalance_factor (the hottest
-    EP group receives/sends disproportionate traffic under skew). Default False
-    preserves the balanced (skew = 1) all-to-all model. The skew is computed by
-    _all_to_all_receiver_skew() in llm_ops_lib.py and ranges in [1, E/K].
-    '''
-
     num_worst_case_experts: int = 1
     '''
     Number of equally-most-loaded ("worst-case") experts. Each of these W experts
@@ -240,7 +231,6 @@ class MoELLMConfig(LLMConfig):
                 # Load-imbalance fields change the generated op graph, so configs that
                 # differ only in these must not collide on the config hash.
                 self.expert_load_imbalance_factor,
-                self.all_to_all_load_imbalance_aware,
                 self.num_worst_case_experts,
             )
         )

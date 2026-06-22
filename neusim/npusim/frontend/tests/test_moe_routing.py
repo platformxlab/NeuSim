@@ -34,28 +34,23 @@ def _deepseek_config(**overrides) -> DeepSeekConfig:
 
 class TestAllToAllReceiverSkew(unittest.TestCase):
     def test_skew_is_one_without_expert_parallelism(self):
-        # EP <= 1 -> always balanced, even with the flag on.
-        config = MoELLMConfig(all_to_all_load_imbalance_aware=True)
+        # EP <= 1 -> always balanced (single group, no incast).
+        config = MoELLMConfig()
         self.assertEqual(
             llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=256, expert_parallelism_degree=1),
             1.0,
         )
 
-    def test_skew_is_one_when_flag_disabled(self):
-        # Default flag is False -> balanced model regardless of EP.
+    def test_skew_always_modeled_by_default(self):
+        # The MoE all-to-all skew is always on: a default config (f=-1 -> E/K worst
+        # case) with EP>1 must produce skew > 1, no opt-in flag required.
         config = MoELLMConfig()
-        self.assertFalse(config.all_to_all_load_imbalance_aware)
-        self.assertEqual(
-            llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=256, expert_parallelism_degree=8),
-            1.0,
-        )
+        skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=256, expert_parallelism_degree=8)
+        self.assertGreater(skew, 1.0)
 
     def test_balanced_load_gives_unit_skew(self):
         # f = 1.0 (perfectly balanced): hottest group == average group -> skew 1.0.
-        config = MoELLMConfig(
-            all_to_all_load_imbalance_aware=True,
-            expert_load_imbalance_factor=1.0,
-        )
+        config = MoELLMConfig(expert_load_imbalance_factor=1.0)
         skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=256, expert_parallelism_degree=8)
         self.assertAlmostEqual(skew, 1.0)
 
@@ -63,10 +58,7 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         # Regression for the floor-of-1 inflation: a balanced load (f=1.0) must give
         # skew 1.0 at ANY token count, including decode (T=1), where the earlier
         # floored model wrongly reported 32.0 / 4.0 / 2.0 for T=1 / 8 / 16.
-        config = MoELLMConfig(
-            all_to_all_load_imbalance_aware=True,
-            expert_load_imbalance_factor=1.0,
-        )
+        config = MoELLMConfig(expert_load_imbalance_factor=1.0)
         for T in (1, 2, 8, 16):
             skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=T, expert_parallelism_degree=8)
             self.assertAlmostEqual(skew, 1.0, msg=f"balanced skew should be 1.0 at T={T}, got {skew}")
@@ -77,7 +69,7 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         #   rem_real = (2048-256)/255 = 1792/255,
         #   hot_group = 256 + 31*1792/255 = 120832/255, avg_group = 256
         #   -> skew = 120832/255/256 = 120832/65280 ~= 1.851.
-        config = MoELLMConfig(all_to_all_load_imbalance_aware=True)
+        config = MoELLMConfig()
         skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=256, expert_parallelism_degree=8)
         self.assertGreater(skew, 1.0)
         self.assertAlmostEqual(skew, 120832 / 65280)
@@ -89,7 +81,6 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         #   hot_group = eff_real + 3*rem_real = (1/2 + 1/6)*T*K = (2/3)*T*K,
         #   avg_group = T*K/3 -> skew = 2.0. (Floored E//EP=3 would give 11/6 ~= 1.833.)
         config = MoELLMConfig(
-            all_to_all_load_imbalance_aware=True,
             num_routed_experts=10,
             num_activated_routed_experts_per_token=2,
         )
@@ -97,7 +88,7 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         self.assertAlmostEqual(skew, 2.0)
 
     def test_skew_never_below_one(self):
-        config = MoELLMConfig(all_to_all_load_imbalance_aware=True)
+        config = MoELLMConfig()
         for ep in (2, 4, 8, 16):
             skew = llm_ops_lib._all_to_all_receiver_skew(config, total_tokens=128, expert_parallelism_degree=ep)
             self.assertGreaterEqual(skew, 1.0)
@@ -108,7 +99,6 @@ class TestAllToAllReceiverSkew(unittest.TestCase):
         #   hot_group = 4*32 + (32-4)*1920/252 = 7168/21, avg_group=256
         #   -> skew = 7168/21/256 = 4/3.
         config = MoELLMConfig(
-            all_to_all_load_imbalance_aware=True,
             expert_load_imbalance_factor=4.0,
             num_worst_case_experts=4,
         )

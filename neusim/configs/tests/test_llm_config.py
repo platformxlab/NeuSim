@@ -67,7 +67,6 @@ class TestMoELLMConfig(unittest.TestCase):
         # Defaults: E=256, K=8 -> E/K = 32
         config = MoELLMConfig()
         self.assertEqual(config.expert_load_imbalance_factor, -1.0)
-        self.assertFalse(config.all_to_all_load_imbalance_aware)
         self.assertEqual(config.num_worst_case_experts, 1)
         # -1.0 sentinel auto-resolves to E/K (worst case)
         self.assertEqual(config.effective_expert_load_imbalance_factor, 256 / 8)
@@ -129,7 +128,6 @@ class TestMoELLMConfig(unittest.TestCase):
         base = MoELLMConfig()
         self.assertNotEqual(hash(base), hash(MoELLMConfig(expert_load_imbalance_factor=2.0)))
         self.assertNotEqual(hash(base), hash(MoELLMConfig(num_worst_case_experts=4)))
-        self.assertNotEqual(hash(base), hash(MoELLMConfig(all_to_all_load_imbalance_aware=True)))
         # Two configs with identical fields still hash equal.
         self.assertEqual(
             hash(MoELLMConfig(expert_load_imbalance_factor=2.0)),
