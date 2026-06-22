@@ -1,4 +1,6 @@
-from pydantic import TypeAdapter
+from math import ceil
+
+from pydantic import TypeAdapter, model_validator
 
 import neusim.configs.models.ModelConfig as ModelConfig
 
@@ -72,6 +74,53 @@ class MoELLMConfig(LLMConfig):
     moe_d_ff: int = -1
     '''Dimension of the MoE feed-forward network. Defaults to d_ff.'''
 
+    expert_load_imbalance_factor: float = -1.0
+    '''
+    Expert load imbalance factor for MoE expert computation.
+    Controls how many tokens the most-loaded expert receives relative to the
+    perfectly balanced case.
+
+    Variables:
+        T = batch_size * seqlen (total tokens per device dispatched together)
+        E = num_routed_experts (e.g., 256 for DeepSeek V3)
+        K = num_activated_routed_experts_per_token (top-k, e.g., 8)
+        f = expert_load_imbalance_factor
+
+    In the balanced case, each expert receives T * K / E tokens.
+    The most-loaded expert receives T * K / E * f tokens.
+
+    - f = 1.0: perfectly balanced (each expert gets T*K/E tokens)
+    - f = E/K: worst case (all tokens routed to one expert, equivalent to T tokens)
+    - f = -1.0 (default sentinel): auto-resolves to E/K (worst case) for backward compatibility
+
+    The effective number of tokens for the most-loaded expert is:
+        effective_tokens = max(1, ceil(T * K / E * f))
+    '''
+
+    num_worst_case_experts: int = 1
+    '''
+    Number of equally-most-loaded ("worst-case") experts. Each of these W experts
+    receives the most-loaded token count (effective_tokens, set by
+    expert_load_imbalance_factor); the remaining E-W experts split what's left.
+
+    Models how concentrated the routing is across the K experts each token picks:
+      - W = 1 (default): one hottest expert; the other E-1 share the rest. With many
+        experts per device this single hot expert is diluted by the average ones.
+      - W = K (= num_activated_routed_experts_per_token): every token selects the SAME
+        set of K experts -> those K experts each receive all T tokens (the absolute
+        worst case), and the other E-K experts receive nothing.
+
+    Range [1, K]. Increasing W concentrates the load onto fewer experts, so a device
+    holding the hot set spends proportionally more time on worst-case experts.
+
+    NOTE: W only sets HOW MANY experts are hot; the per-hot-expert load is governed
+    solely by expert_load_imbalance_factor (f) via get_effective_expert_tokens. The
+    "W = K -> each hot expert receives all T tokens" absolute-worst-case above holds
+    only when f is also at its maximum E/K (the default f = -1.0 sentinel resolves to
+    exactly that). With a smaller f, W = K still gives only T*K/E*f tokens per hot
+    expert, not T -- raise f together with W to model the absolute worst case.
+    '''
+
     expert_parallelism_degree: int = 1
     num_expert_parallel_axes: int = 1
     expert_parallel_degree_dcn: int = 1
@@ -98,6 +147,55 @@ class MoELLMConfig(LLMConfig):
         Returns the total number of experts per token, including shared experts and routed experts.
         '''
         return self.num_shared_experts + self.num_activated_routed_experts_per_token
+
+    @property
+    def effective_expert_load_imbalance_factor(self) -> float:
+        '''
+        Returns the effective expert load imbalance factor.
+        Resolves the -1.0 sentinel to E/K (worst case).
+        '''
+        if self.expert_load_imbalance_factor == -1.0:
+            return self.num_routed_experts / self.num_activated_routed_experts_per_token
+        return self.expert_load_imbalance_factor
+
+    def get_effective_expert_tokens(self, total_tokens: int) -> int:
+        '''
+        Computes the effective number of tokens for the most-loaded expert.
+        total_tokens = batch_size * seqlen (total tokens dispatched together).
+        Returns max(1, ceil(total_tokens * K / E * f)).
+        '''
+        f = self.effective_expert_load_imbalance_factor
+        K = self.num_activated_routed_experts_per_token
+        E = self.num_routed_experts
+        return max(1, ceil(total_tokens * K / E * f))
+
+    @model_validator(mode='after')
+    def _validate_expert_load_imbalance_factor(self) -> 'MoELLMConfig':
+        # Guard the E/K divisions below (and in get_effective_expert_tokens /
+        # effective_expert_load_imbalance_factor) so a degenerate config fails with a
+        # clear message instead of a bare ZeroDivisionError.
+        if self.num_routed_experts <= 0 or self.num_activated_routed_experts_per_token <= 0:
+            raise ValueError(
+                "num_routed_experts and num_activated_routed_experts_per_token must both "
+                f"be >= 1. Got num_routed_experts={self.num_routed_experts}, "
+                f"num_activated_routed_experts_per_token={self.num_activated_routed_experts_per_token}."
+            )
+        f = self.expert_load_imbalance_factor
+        max_f = self.num_routed_experts / self.num_activated_routed_experts_per_token
+        if f != -1.0 and not (1.0 <= f <= max_f):
+            raise ValueError(
+                f"expert_load_imbalance_factor must be -1.0 (auto) or in [1.0, {max_f}] "
+                f"(E/K = {self.num_routed_experts}/{self.num_activated_routed_experts_per_token}). "
+                f"Got {f}."
+            )
+        K = self.num_activated_routed_experts_per_token
+        if not (1 <= self.num_worst_case_experts <= K):
+            raise ValueError(
+                f"num_worst_case_experts must be in [1, K={K}] "
+                f"(K = num_activated_routed_experts_per_token). "
+                f"Got {self.num_worst_case_experts}."
+            )
+        return self
 
     def __init__(self, **kwargs):
         if "moe_d_ff" not in kwargs:
@@ -130,6 +228,10 @@ class MoELLMConfig(LLMConfig):
                 self.microbatch_size_dcn,
                 self.microbatch_size_ici,
                 self.global_batch_size,
+                # Load-imbalance fields change the generated op graph, so configs that
+                # differ only in these must not collide on the config hash.
+                self.expert_load_imbalance_factor,
+                self.num_worst_case_experts,
             )
         )
 

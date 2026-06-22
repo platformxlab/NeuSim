@@ -1258,6 +1258,7 @@ def create_all_to_all_op(
     config: ModelConfig,
     bisection_bw: float,
     num_parallelism: int,
+    receiver_skew: float = 1.0,
     dtype: str = "DT_BFLOAT16",
     fusion_id: int = 0,
     description: str = "AllToAll",
@@ -1268,6 +1269,10 @@ def create_all_to_all_op(
     @input: Input tensor.
     @bisection_bw: Bisection bandwidth per chip.
     @num_parallelism: Parallelism degrees.
+    @receiver_skew: incast/outcast skew (>= 1) of the hottest endpoint's traffic
+        relative to the average; 1.0 is the balanced all-to-all. Scales the
+        bandwidth-bound term to model congestion at the most-loaded endpoint
+        (e.g. MoE dispatch/combine under expert load imbalance).
     '''
     input_shape = input.shape
     bytes_per_elem = util.get_size_bytes_from_dtype(dtype)
@@ -1289,7 +1294,7 @@ def create_all_to_all_op(
     final_op.stats.ici_traffic_inbound_bytes = transfer_size
     final_op.stats.ici_time_ns = max(
         ceil(
-            max(
+            receiver_skew * max(
                 final_op.stats.ici_traffic_outbound_bytes,
                 final_op.stats.ici_traffic_inbound_bytes,
             ) / agg_bw
@@ -1312,6 +1317,67 @@ def create_all_to_all_op(
     final_op.config_str = f"AllToAll({input_shape_str}->{output_shape_str})"
 
     return final_op
+
+
+def _num_experts_on_worst_case_device(
+    num_routed_experts: int, expert_parallelism_degree: int
+) -> int:
+    '''
+    Number of routed experts on the most-loaded (worst-case) EP device/group.
+
+    Shared by both the all-to-all skew model (_all_to_all_receiver_skew) and the
+    expert-compute model (create_ffn_deepseek_moe) so the two stay consistent.
+    When experts are spread as evenly as possible across EP groups, the busiest
+    group holds ceil(E / EP) experts -- using floor (E // EP) would drop the
+    remainder when EP does not divide E, and would model ZERO experts when EP > E.
+    '''
+    return ceil(num_routed_experts / max(1, expert_parallelism_degree))
+
+
+def _all_to_all_receiver_skew(
+    config, total_tokens: int, expert_parallelism_degree: int
+) -> float:
+    '''
+    Incast/outcast skew of the MoE dispatch/combine all-to-all under expert load
+    imbalance: the ratio of the hottest EP group's traffic to the average group's.
+
+    Under skew, the EP group holding the most-loaded expert receives (dispatch) /
+    sends (combine) disproportionate traffic and bottlenecks the exchange, so the
+    all-to-all completion time scales by this factor. The MoE all-to-all is always
+    modeled with this skew; it degrades to 1.0 (balanced model) when expert
+    parallelism is off, the model is non-MoE, or the load is balanced
+    (expert_load_imbalance_factor = 1.0). Range: [1, E/K] (1 at EP=1; up to E/K
+    when each expert is its own EP group). The default factor sentinel (-1.0)
+    resolves to the E/K worst case, matching the compute path's default.
+
+    The per-expert token loads are kept in REAL (un-floored) units here: the skew
+    is a ratio of traffic, so a perfectly balanced load (f=1.0) must yield exactly
+    1.0 at any token count. Flooring each expert to >= 1 token (as the compute path
+    must, to emit a valid matmul) would otherwise inflate the ratio in the small-
+    token / decode regime (e.g. T=1 -> 32x for a balanced load). The >= 1 floor
+    therefore belongs only to the matmul seqlen, not to this ratio.
+    '''
+    if expert_parallelism_degree <= 1:
+        return 1.0
+    E = config.num_routed_experts
+    K = config.num_activated_routed_experts_per_token
+    if E <= 1:
+        return 1.0
+    total_routings = total_tokens * K
+    if total_routings <= 0:
+        return 1.0
+    # Same worst-case-device expert count the compute model uses (ceil(E/EP)).
+    experts_per_group = _num_experts_on_worst_case_device(E, expert_parallelism_degree)
+    # W hot experts each at eff_real real tokens; the hottest EP group holds up to W.
+    W = max(1, min(getattr(config, "num_worst_case_experts", 1), K))
+    W_group = min(W, experts_per_group)
+    eff_real = config.effective_expert_load_imbalance_factor * total_routings / E  # = T*K/E*f
+    rem_real = (total_routings - W * eff_real) / max(1, E - W)
+    hot_group = W_group * eff_real + (experts_per_group - W_group) * rem_real
+    avg_group = total_routings / expert_parallelism_degree
+    if avg_group <= 0:
+        return 1.0
+    return max(1.0, hot_group / avg_group)
 
 
 def create_all_reduce_op(
@@ -3504,6 +3570,12 @@ def create_ffn_deepseek_moe(
 
     # All to All token dispatch
     bisection_bw = None
+    # Under expert load imbalance the dispatch/combine all-to-all becomes an
+    # incast/outcast on the hottest EP group; scale latency by the receiver skew
+    # (1.0 when EP is off or the load is balanced, f=1.0).
+    a2a_skew = _all_to_all_receiver_skew(
+        config, batch_size * seqlen, expert_parallelism_degree
+    )
     if expert_parallelism_degree > 1:
         bisection_bw, ici_topology = get_bisection_bw_per_chip_GBps(config)
         ops.append(
@@ -3521,6 +3593,7 @@ def create_ffn_deepseek_moe(
                 config=config,
                 bisection_bw=bisection_bw,
                 num_parallelism=expert_parallelism_degree,
+                receiver_skew=a2a_skew,
                 dtype="DT_FLOAT8",
                 fusion_id=fusion_id,
                 name="MoE_Dispatch_AllToAll",
@@ -3530,23 +3603,73 @@ def create_ffn_deepseek_moe(
         )
         fusion_id += 1
 
-    # MoE expert computation
-    for expert_id in range(config.num_activated_routed_experts_per_token):
-        ops += create_ffn_matmul_llama(
-            batch_size=batch_size,
-            # TODO: currently assumes worst case where all tokens are routed to
-            # the same experts on the same device.
-            # May want to account for token distribution in the future.
-            seqlen=seqlen,
-            d_model=config.d_model,
-            d_ff=d_ff,
-            count=count,
-            dtype=dtype,
-            fusion_id_start=fusion_id,
-            is_decode=is_decode,
-            description_prefix=(description_prefix + f"FFN_routed_expert{expert_id}-"),
-        )
-        fusion_id = ops[-1].fusion_id + 1
+    # MoE expert computation — model per-device critical path on the worst-case device.
+    # Each device has E_per_device = E / EP experts (assuming even distribution).
+    # Globally there are T * K total expert-token pairs (T = batch_size * seqlen,
+    # K = num_activated_routed_experts_per_token, E = num_routed_experts).
+    # W = num_worst_case_experts "hot" experts each receive effective_tokens (based on
+    # the load imbalance factor f); the remaining E-W experts split the rest evenly,
+    # eff_real/rem_real being the REAL (un-floored) per-expert token loads.
+    # W = 1 is the single-hottest-expert case; W = K models all tokens picking the
+    # same K experts. On the worst-case device, up to W_dev hot experts run, then the
+    # remaining experts. A matmul needs an integer seqlen >= 1, so when rem_real < 1
+    # (e.g. decode, where there are fewer tokens than experts) only ~the real number
+    # of routed experts activate (each on 1 token) instead of forcing all E_per_device
+    # experts to a floored >= 1 token — which would inflate decode FFN work ~E/(T*K)x.
+    E = config.num_routed_experts
+    K = config.num_activated_routed_experts_per_token
+    f = config.effective_expert_load_imbalance_factor
+    # Worst-case device holds ceil(E/EP) experts (shared with the skew model so the
+    # latency and compute models agree; >= 1 even when EP > E).
+    E_per_device = _num_experts_on_worst_case_device(E, expert_parallelism_degree)
+    W = max(1, min(config.num_worst_case_experts, K))
+    W_dev = min(W, E_per_device)  # hot experts that land on the worst-case device
+    total_tokens = batch_size * seqlen
+    effective_tokens = config.get_effective_expert_tokens(total_tokens)  # floored hot load (>= 1)
+
+    # W_dev most-loaded experts (each at effective_tokens)
+    ops += create_ffn_matmul_llama(
+        batch_size=1,
+        seqlen=effective_tokens,
+        d_model=config.d_model,
+        d_ff=d_ff,
+        count=count * W_dev,
+        dtype=dtype,
+        fusion_id_start=fusion_id,
+        is_decode=is_decode,
+        description_prefix=(description_prefix + "FFN_routed_expert_most_loaded-"),
+    )
+    fusion_id = ops[-1].fusion_id + 1
+
+    # Remaining experts on the device share the leftover routings.
+    if E_per_device > W_dev:
+        total_routings = total_tokens * K
+        eff_real = f * total_routings / E  # real (un-floored) hot-expert load
+        remaining_tokens = total_routings - W * eff_real
+        if remaining_tokens > 0:
+            rem_real = remaining_tokens / max(1, E - W)  # real tokens per remaining expert
+            if rem_real >= 1:
+                # Every remaining device expert is active (>= 1 token each).
+                seqlen_remaining = ceil(rem_real)
+                num_remaining_experts = E_per_device - W_dev
+            else:
+                # Fewer tokens than experts (decode): only ~the routed count activate,
+                # each on a single token, instead of all E_per_device - W_dev.
+                seqlen_remaining = 1
+                device_remaining_tokens = (E_per_device - W_dev) * rem_real
+                num_remaining_experts = max(1, min(E_per_device - W_dev, ceil(device_remaining_tokens)))
+            ops += create_ffn_matmul_llama(
+                batch_size=1,
+                seqlen=seqlen_remaining,
+                d_model=config.d_model,
+                d_ff=d_ff,
+                count=count * num_remaining_experts,
+                dtype=dtype,
+                fusion_id_start=fusion_id,
+                is_decode=is_decode,
+                description_prefix=(description_prefix + "FFN_routed_expert_remaining-"),
+            )
+            fusion_id = ops[-1].fusion_id + 1
 
     # All to All token combine
     if expert_parallelism_degree > 1:
@@ -3567,6 +3690,7 @@ def create_ffn_deepseek_moe(
                 config=config,
                 bisection_bw=bisection_bw,
                 num_parallelism=expert_parallelism_degree,
+                receiver_skew=a2a_skew,
                 dtype="DT_FLOAT8",
                 fusion_id=fusion_id,
                 name="MoE_Dispatch_AllToAll",

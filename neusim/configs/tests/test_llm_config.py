@@ -63,6 +63,77 @@ class TestMoELLMConfig(unittest.TestCase):
         config2 = MoELLMConfig()
         self.assertEqual(hash(config1), hash(config2))
 
+    def test_moe_load_imbalance_defaults(self):
+        # Defaults: E=256, K=8 -> E/K = 32
+        config = MoELLMConfig()
+        self.assertEqual(config.expert_load_imbalance_factor, -1.0)
+        self.assertEqual(config.num_worst_case_experts, 1)
+        # -1.0 sentinel auto-resolves to E/K (worst case)
+        self.assertEqual(config.effective_expert_load_imbalance_factor, 256 / 8)
+
+    def test_effective_expert_load_imbalance_factor_explicit(self):
+        config = MoELLMConfig(expert_load_imbalance_factor=2.0)
+        self.assertEqual(config.effective_expert_load_imbalance_factor, 2.0)
+
+    def test_get_effective_expert_tokens_worst_case(self):
+        # f = -1 (auto = E/K = 32): T*K/E*f = T -> all tokens land on the hot expert
+        config = MoELLMConfig()
+        self.assertEqual(config.get_effective_expert_tokens(256), 256)
+        self.assertEqual(config.get_effective_expert_tokens(1), 1)
+
+    def test_get_effective_expert_tokens_balanced(self):
+        # f = 1.0 (balanced): each expert gets T*K/E tokens. T=256,K=8,E=256 -> 8
+        config = MoELLMConfig(expert_load_imbalance_factor=1.0)
+        self.assertEqual(config.get_effective_expert_tokens(256), 8)
+        # at least 1 token even when the balanced share rounds below 1
+        self.assertEqual(config.get_effective_expert_tokens(1), 1)
+
+    def test_get_effective_expert_tokens_ceil(self):
+        # Fractional share is rounded up: T=100,K=8,E=256,f=2.0 -> ceil(6.25) = 7
+        config = MoELLMConfig(expert_load_imbalance_factor=2.0)
+        self.assertEqual(config.get_effective_expert_tokens(100), 7)
+
+    def test_expert_load_imbalance_factor_validation(self):
+        # below 1.0 is invalid
+        with self.assertRaises(ValueError):
+            MoELLMConfig(expert_load_imbalance_factor=0.5)
+        # above E/K (=32) is invalid
+        with self.assertRaises(ValueError):
+            MoELLMConfig(expert_load_imbalance_factor=64.0)
+        # boundary values are valid
+        MoELLMConfig(expert_load_imbalance_factor=1.0)
+        MoELLMConfig(expert_load_imbalance_factor=32.0)
+
+    def test_num_worst_case_experts_validation(self):
+        # must be in [1, K=8]
+        with self.assertRaises(ValueError):
+            MoELLMConfig(num_worst_case_experts=0)
+        with self.assertRaises(ValueError):
+            MoELLMConfig(num_worst_case_experts=9)
+        # boundaries valid
+        MoELLMConfig(num_worst_case_experts=1)
+        MoELLMConfig(num_worst_case_experts=8)
+
+    def test_degenerate_expert_counts_raise_value_error(self):
+        # K=0 or E=0 would otherwise hit a bare ZeroDivisionError in the E/K division;
+        # the validator must surface a clear ValueError instead.
+        with self.assertRaises(ValueError):
+            MoELLMConfig(num_activated_routed_experts_per_token=0)
+        with self.assertRaises(ValueError):
+            MoELLMConfig(num_routed_experts=0)
+
+    def test_hash_distinguishes_load_imbalance_fields(self):
+        # The new fields change the generated op graph, so configs differing only in
+        # them must not collide on the config hash.
+        base = MoELLMConfig()
+        self.assertNotEqual(hash(base), hash(MoELLMConfig(expert_load_imbalance_factor=2.0)))
+        self.assertNotEqual(hash(base), hash(MoELLMConfig(num_worst_case_experts=4)))
+        # Two configs with identical fields still hash equal.
+        self.assertEqual(
+            hash(MoELLMConfig(expert_load_imbalance_factor=2.0)),
+            hash(MoELLMConfig(expert_load_imbalance_factor=2.0)),
+        )
+
 class TestDeepSeekConfig(unittest.TestCase):
     def test_deepseek_config(self):
         config = DeepSeekConfig(
