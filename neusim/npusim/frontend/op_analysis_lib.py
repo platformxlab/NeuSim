@@ -97,11 +97,26 @@ def fill_operators_execution_info(
             memory_time = 0
 
         vmem_time = calculate_vmem_time_ns(converted_op, mxu_time, vpu_time, memory_time, config)
-        print(f"Calculated vmem_time_ns: {vmem_time} for op: {converted_op.name}")
+        logging.debug(
+            "Calculated vmem_time_ns: %s for op: %s",
+            vmem_time,
+            converted_op.name,
+        )
 
         ici_time = converted_op.stats.ici_time_ns
         exe_time = max(compute_time, ici_time, memory_time, vmem_time)
-        print(f"Op: {converted_op.name}, mxu_time: {mxu_time}, vpu_time: {vpu_time}, compute_time: {compute_time}, memory_time: {memory_time}, ici_time: {ici_time}, vmem_time: {vmem_time}, exe_time: {exe_time}")
+        logging.debug(
+            "Op: %s, mxu_time: %s, vpu_time: %s, compute_time: %s, "
+            "memory_time: %s, ici_time: %s, vmem_time: %s, exe_time: %s",
+            converted_op.name,
+            mxu_time,
+            vpu_time,
+            compute_time,
+            memory_time,
+            ici_time,
+            vmem_time,
+            exe_time,
+        )
         converted_op.stats.sa_time_ns = mxu_time
         converted_op.stats.vu_time_ns = vpu_time
         # converted_op.stats.compute_time_ns = compute_time

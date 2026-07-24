@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from pydantic import TypeAdapter
+from typing import Any
+
+from pydantic import BaseModel, model_validator
 
 
 # @dataclass(kw_only=True)
@@ -64,15 +65,47 @@ class ChipConfig(BaseModel):
     '''Static power of ICI in Watts'''
     static_power_hbm_mc_W: float = 10.264041296
     '''Static power of HBM controller (digital logic) in Watts'''
-    static_power_hbm_phy_W: float = 15.396061944
-    '''Static power of HBM PHY (analog part) in Watts'''
+    static_power_hbm_die_W: float = 6.2
+    '''Static power of the HBM DRAM dies in Watts'''
+    static_power_hbm_io_W: float = 0.0
+    '''Static power of the HBM I/O links in Watts'''
     static_power_other_W: float = 44.82811018
     '''Static power of other components on chip in Watts'''
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_hbm_phy(cls, data: Any) -> Any:
+        '''Map a legacy aggregate PHY value to die power unless split fields exist.'''
+        if not isinstance(data, dict) or "static_power_hbm_phy_W" not in data:
+            return data
+        migrated = dict(data)
+        legacy_phy = migrated.pop("static_power_hbm_phy_W")
+        if (
+            "static_power_hbm_die_W" not in migrated
+            and "static_power_hbm_io_W" not in migrated
+        ):
+            migrated["static_power_hbm_die_W"] = legacy_phy
+            migrated["static_power_hbm_io_W"] = 0.0
+        return migrated
+
+    @property
+    def static_power_hbm_phy_W(self) -> float:
+        '''Backward-compatible aggregate HBM die and I/O static power.'''
+        return self.static_power_hbm_die_W + self.static_power_hbm_io_W
+
+    @static_power_hbm_phy_W.setter
+    def static_power_hbm_phy_W(self, value: float) -> None:
+        self.static_power_hbm_die_W = value
+        self.static_power_hbm_io_W = 0.0
+
     @property
     def static_power_hbm_W(self) -> float:
-        '''Static power of HBM controller+PHY in Watts'''
-        return self.static_power_hbm_mc_W + self.static_power_hbm_phy_W
+        '''Static power of HBM controller, dies, and I/O in Watts.'''
+        return (
+            self.static_power_hbm_mc_W
+            + self.static_power_hbm_die_W
+            + self.static_power_hbm_io_W
+        )
 
     dynamic_power_W_per_SA: float = 28.19413333
     '''Dynamic power of a single SA in Watts'''

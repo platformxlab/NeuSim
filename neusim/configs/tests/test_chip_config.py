@@ -1,5 +1,9 @@
+import json
 import unittest
+from pathlib import Path
+
 from neusim.configs.chips.ChipConfig import ChipConfig
+
 
 class TestChipConfig(unittest.TestCase):
     def test_chip_config_properties(self):
@@ -12,8 +16,8 @@ class TestChipConfig(unittest.TestCase):
         self.assertAlmostEqual(config.vmem_bw_GBps, 43008.0)
 
         # Test static_power_hbm_W
-        # Default: static_power_hbm_mc_W=10.264041296, static_power_hbm_phy_W=15.396061944
-        expected_static_hbm = 10.264041296 + 15.396061944
+        # Default split calibration: MC=10.264041296, die=6.2, I/O=0.
+        expected_static_hbm = 10.264041296 + 6.2
         self.assertAlmostEqual(config.static_power_hbm_W, expected_static_hbm)
 
         # Test peak_SA_tflops_per_sec
@@ -95,3 +99,29 @@ class TestChipConfig(unittest.TestCase):
 
         # Test total_power_peak_W
         self.assertAlmostEqual(config.total_power_peak_W, expected_static_total + expected_dynamic_total)
+
+
+    def test_legacy_hbm_phy_migration(self):
+        config = ChipConfig(
+            static_power_hbm_mc_W=10.0,
+            static_power_hbm_phy_W=15.0,
+        )
+        self.assertEqual(config.static_power_hbm_die_W, 15.0)
+        self.assertEqual(config.static_power_hbm_io_W, 0.0)
+        self.assertEqual(config.static_power_hbm_phy_W, 15.0)
+        self.assertEqual(config.static_power_hbm_W, 25.0)
+
+        # Explicit split values take precedence over a stale legacy aggregate.
+        explicit = ChipConfig(
+            static_power_hbm_phy_W=99.0,
+            static_power_hbm_die_W=6.2,
+            static_power_hbm_io_W=1.0,
+        )
+        self.assertEqual(explicit.static_power_hbm_phy_W, 7.2)
+
+    def test_checked_in_v5p_uses_explicit_corrected_calibration(self):
+        config_path = Path(__file__).parents[3] / "configs/chips/tpuv5p.json"
+        config = ChipConfig(**json.loads(config_path.read_text()))
+        self.assertEqual(config.static_power_hbm_die_W, 6.2)
+        self.assertEqual(config.static_power_hbm_io_W, 0.0)
+        self.assertEqual(config.static_power_other_W, 44.82811018)

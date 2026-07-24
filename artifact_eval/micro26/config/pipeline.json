@@ -1,0 +1,88 @@
+{
+  "schema_version": 2,
+  "default_selection": "2,3,4,11-13,16-18,20-21",
+  "figures": {
+    "2": {
+      "title": "Request energy breakdown",
+      "experiment_groups": ["standard_sweep"],
+      "plot_script": "figure_02.py",
+      "input": "raw/standard_sweep/energy_records.json",
+      "output": "figures/figure_02_energy_breakdown.pdf"
+    },
+    "3": {
+      "title": "Per-component utilization",
+      "experiment_groups": ["standard_sweep"],
+      "plot_script": "figure_03.py",
+      "input": "raw/standard_sweep/energy_records.json",
+      "output": "figures/figure_03_component_utilization.pdf"
+    },
+    "4": {
+      "title": "Utilization over time",
+      "experiment_groups": ["standard_sweep"],
+      "plot_script": "figure_04.py",
+      "input": "raw/standard_sweep/operator_records",
+      "output": "figures/figure_04_utilization_timeline.pdf"
+    },
+    "11": {
+      "title": "DVFS energy, power, and performance",
+      "experiment_groups": ["standard_sweep"],
+      "plot_script": "figure_11.py",
+      "input": "raw/standard_sweep/energy_records.json",
+      "output": "figures/figure_11_dvfs_summary.pdf"
+    },
+    "12": {
+      "title": "Component-level energy savings",
+      "experiment_groups": ["standard_sweep"],
+      "plot_script": "figure_12.py",
+      "input": "raw/standard_sweep/energy_records.json",
+      "output": "figures/figure_12_component_energy.pdf"
+    },
+    "13": {
+      "title": "IVR power-conversion overhead",
+      "experiment_groups": ["standard_sweep"],
+      "plot_script": "figure_13.py",
+      "input": "raw/standard_sweep/ivr_records.json",
+      "output": "figures/figure_13_ivr_overhead.pdf"
+    },
+    "16": {
+      "title": "Spatial and temporal DVFS granularity",
+      "experiment_groups": ["temporal_granularity"],
+      "plot_script": "figure_16.py",
+      "input": "raw/temporal_granularity/energy_records.json",
+      "output": "figures/figure_16_dvfs_granularity.pdf",
+      "note": "Millisecond policies use the authoritative trace-util modules recovered at commit 8ad6961b2a266e91ebb1162c7e2c5df61d10b1a4 and ported to NeuSim."
+    },
+    "17": {
+      "title": "V/f-domain count",
+      "experiment_groups": ["standard_sweep", "domain_count"],
+      "plot_script": "figure_17.py",
+      "input": "raw/domain_count/domain_count_records.json",
+      "reference_input": "raw/standard_sweep/energy_records.json",
+      "output": "figures/figure_17_domain_count.pdf",
+      "note": "Raw simulator values are plotted. Paper-only display offsets and clamping are not enabled."
+    },
+    "18": {
+      "title": "Sequence-length sensitivity",
+      "experiment_groups": ["fixed_sequence_sweep"],
+      "plot_script": "figure_18.py",
+      "input": "raw/fixed_sequence_sweep/energy_records.json",
+      "output": "figures/figure_18_sequence_length.pdf",
+      "note": "Native NeuSim fixed-length sweep; raw values are plotted without paper-era static-energy correction."
+    },
+    "20": {
+      "title": "MoE expert-load imbalance",
+      "experiment_groups": ["expert_imbalance"],
+      "plot_script": "figure_20.py",
+      "input": "raw/expert_imbalance/expert_imbalance_records.json",
+      "output": "figures/figure_20_expert_imbalance.pdf"
+    },
+    "21": {
+      "title": "DVFS plus power gating",
+      "experiment_groups": ["power_gating"],
+      "plot_script": "figure_21.py",
+      "input": "raw/power_gating/energy_records.json",
+      "output": "figures/figure_21_dvfs_power_gating.pdf",
+      "plot_args": ["--model", "llama3-70b"]
+    }
+  }
+}

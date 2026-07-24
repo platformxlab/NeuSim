@@ -1,0 +1,143 @@
+{
+  "model": "llama3-70b",
+  "trace": "Azure-Code",
+  "chip": "tpuv5p",
+  "description": "Figure 5 SLO targets: 5x the single-request TTFT/TPOT on the minimum four-chip TPU v5p topology.",
+  "results": [
+    {
+      "percentile": 33,
+      "input_seqlen": 1291,
+      "output_seqlen": 22,
+      "prefill": {
+        "representative_seqlen": 1291,
+        "min_chips": 4,
+        "parallelism_config": {
+          "num_chips": 4,
+          "data_parallelism_degree": 1,
+          "tensor_parallelism_degree": 4,
+          "pipeline_parallelism_degree": 1,
+          "data_parallel_degree_dcn": 1,
+          "pipeline_parallel_degree_dcn": 1
+        },
+        "base_TTFT_sec": 0.14496648,
+        "slo_TTFT_sec": {
+          "1x": 0.144966,
+          "2x": 0.289933,
+          "3x": 0.434899,
+          "4x": 0.579866,
+          "5x": 0.724832
+        }
+      },
+      "decode": {
+        "representative_seqlen": 1313,
+        "min_chips": 4,
+        "parallelism_config": {
+          "num_chips": 4,
+          "data_parallelism_degree": 1,
+          "tensor_parallelism_degree": 4,
+          "pipeline_parallelism_degree": 1,
+          "data_parallel_degree_dcn": 1,
+          "pipeline_parallel_degree_dcn": 1
+        },
+        "base_TPOT_ms": 18.23992,
+        "slo_TPOT_ms": {
+          "1x": 18.23992,
+          "2x": 36.47984,
+          "3x": 54.71976,
+          "4x": 72.95968,
+          "5x": 91.1996
+        }
+      }
+    },
+    {
+      "percentile": 66,
+      "input_seqlen": 2777,
+      "output_seqlen": 25,
+      "prefill": {
+        "representative_seqlen": 2777,
+        "min_chips": 4,
+        "parallelism_config": {
+          "num_chips": 4,
+          "data_parallelism_degree": 1,
+          "tensor_parallelism_degree": 4,
+          "pipeline_parallelism_degree": 1,
+          "data_parallel_degree_dcn": 1,
+          "pipeline_parallel_degree_dcn": 1
+        },
+        "base_TTFT_sec": 0.29768096,
+        "slo_TTFT_sec": {
+          "1x": 0.297681,
+          "2x": 0.595362,
+          "3x": 0.893043,
+          "4x": 1.190724,
+          "5x": 1.488405
+        }
+      },
+      "decode": {
+        "representative_seqlen": 2802,
+        "min_chips": 4,
+        "parallelism_config": {
+          "num_chips": 4,
+          "data_parallelism_degree": 1,
+          "tensor_parallelism_degree": 4,
+          "pipeline_parallelism_degree": 1,
+          "data_parallel_degree_dcn": 1,
+          "pipeline_parallel_degree_dcn": 1
+        },
+        "base_TPOT_ms": 18.58024,
+        "slo_TPOT_ms": {
+          "1x": 18.58024,
+          "2x": 37.16048,
+          "3x": 55.74072,
+          "4x": 74.32096,
+          "5x": 92.9012
+        }
+      }
+    },
+    {
+      "percentile": 100,
+      "input_seqlen": 7691,
+      "output_seqlen": 1380,
+      "prefill": {
+        "representative_seqlen": 7691,
+        "min_chips": 4,
+        "parallelism_config": {
+          "num_chips": 4,
+          "data_parallelism_degree": 1,
+          "tensor_parallelism_degree": 4,
+          "pipeline_parallelism_degree": 1,
+          "data_parallel_degree_dcn": 1,
+          "pipeline_parallel_degree_dcn": 1
+        },
+        "base_TTFT_sec": 0.88109832,
+        "slo_TTFT_sec": {
+          "1x": 0.881098,
+          "2x": 1.762197,
+          "3x": 2.643295,
+          "4x": 3.524393,
+          "5x": 4.405492
+        }
+      },
+      "decode": {
+        "representative_seqlen": 9071,
+        "min_chips": 4,
+        "parallelism_config": {
+          "num_chips": 4,
+          "data_parallelism_degree": 1,
+          "tensor_parallelism_degree": 4,
+          "pipeline_parallelism_degree": 1,
+          "data_parallel_degree_dcn": 1,
+          "pipeline_parallel_degree_dcn": 1
+        },
+        "base_TPOT_ms": 19.93976,
+        "slo_TPOT_ms": {
+          "1x": 19.93976,
+          "2x": 39.87952,
+          "3x": 59.81928,
+          "4x": 79.75904,
+          "5x": 99.6988
+        }
+      }
+    }
+  ]
+}

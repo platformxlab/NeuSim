@@ -1,0 +1,218 @@
+{
+  "schema_version": 2,
+  "configuration_source": "Sensitivity derived from the MICRO26 Table 3 transcription: Llama3.1-405B decode uses 16 chips with TP16 instead of 64 chips with TP64; all other settings are unchanged.",
+  "paper": {
+    "title": "Enabling Spatially Fine-Grained DVFS in Neural Processing Units for Energy-Efficient LLM Serving",
+    "default_request_tokens": {
+      "input": 4096,
+      "output": 512
+    }
+  },
+  "table_3_configuration_semantics": {
+    "request_node": {
+      "fields": [
+        "models[].phases.<phase>.chips",
+        "models[].phases.<phase>.parallelism"
+      ],
+      "meaning": "Per-request NPU-node configuration. Parallelism is DP/TP/PP/EP and its product equals the chips assigned to one request node."
+    },
+    "service_cluster": {
+      "field": "models[].cluster_nodes.<phase>",
+      "meaning": "Number of independently provisioned prefill or decode nodes in the service-level cluster from Table 3; it is not part of one request's DP/TP/PP/EP tuple."
+    },
+    "artifact_host_scheduler": {
+      "fields": [
+        "--jobs",
+        "--trace-workers",
+        "--group-trace-workers"
+      ],
+      "meaning": "CPU/Ray concurrency used to execute artifact experiments. These host controls are unrelated to both NPU chips per request node and service-level cluster-node counts."
+    },
+    "requested_figure_scope": "The AE target is Figures 2, 3, 4, 11-13, 16-18, and 20-21. These figures use single-request node configurations unless a figure explicitly says otherwise. Table 3 cluster-node counts describe service-level replay (Figure 22) and are recorded for provenance, not multiplied into the standard sweep."
+  },
+  "models": [
+    {
+      "id": "llama3_70b",
+      "paper_label": "Llama3-70B",
+      "cluster_nodes": {
+        "prefill": 24,
+        "decode": 8
+      },
+      "phases": {
+        "prefill": {
+          "chips": 4,
+          "parallelism": {
+            "data": 1,
+            "tensor": 4,
+            "pipeline": 1,
+            "expert": 1
+          }
+        },
+        "decode": {
+          "chips": 4,
+          "parallelism": {
+            "data": 1,
+            "tensor": 4,
+            "pipeline": 1,
+            "expert": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "llama3_1_405b",
+      "paper_label": "Llama3.1-405B",
+      "cluster_nodes": {
+        "prefill": 24,
+        "decode": 52
+      },
+      "phases": {
+        "prefill": {
+          "chips": 32,
+          "parallelism": {
+            "data": 1,
+            "tensor": 32,
+            "pipeline": 1,
+            "expert": 1
+          }
+        },
+        "decode": {
+          "chips": 16,
+          "parallelism": {
+            "data": 1,
+            "tensor": 16,
+            "pipeline": 1,
+            "expert": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "deepseekv2_236b",
+      "paper_label": "DeepSeekV2-236B",
+      "cluster_nodes": {
+        "prefill": 24,
+        "decode": 24
+      },
+      "phases": {
+        "prefill": {
+          "chips": 4,
+          "parallelism": {
+            "data": 1,
+            "tensor": 4,
+            "pipeline": 1,
+            "expert": 1
+          }
+        },
+        "decode": {
+          "chips": 4,
+          "parallelism": {
+            "data": 1,
+            "tensor": 4,
+            "pipeline": 1,
+            "expert": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "deepseekv3_671b",
+      "paper_label": "DeepSeekV3-671B",
+      "cluster_nodes": {
+        "prefill": 36,
+        "decode": 24
+      },
+      "phases": {
+        "prefill": {
+          "chips": 32,
+          "parallelism": {
+            "data": 1,
+            "tensor": 16,
+            "pipeline": 1,
+            "expert": 2
+          }
+        },
+        "decode": {
+          "chips": 32,
+          "parallelism": {
+            "data": 1,
+            "tensor": 16,
+            "pipeline": 1,
+            "expert": 2
+          }
+        }
+      }
+    }
+  ],
+  "performance_degradation_thresholds_percent": {
+    "paper_sweep": [
+      0,
+      2,
+      5,
+      10,
+      20,
+      25,
+      30
+    ],
+    "domain_grid": [
+      0,
+      1,
+      2,
+      5,
+      10,
+      20,
+      30
+    ],
+    "figure_18": [
+      0,
+      1,
+      2,
+      5,
+      10,
+      20,
+      30
+    ],
+    "figure_20_sweep": [
+      0,
+      1,
+      2,
+      5,
+      10,
+      20
+    ],
+    "figure_21": [
+      0,
+      2,
+      5,
+      10,
+      20
+    ]
+  },
+  "sequence_lengths_tokens": {
+    "default_input": 4096,
+    "fixed_output_for_sweep": 512,
+    "input_sweep": [
+      256,
+      512,
+      1024,
+      2048,
+      4096,
+      8192,
+      16384,
+      32768,
+      65536,
+      131072,
+      262144,
+      524288,
+      1048576
+    ]
+  },
+  "expert_capacity_factors": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ]
+}

@@ -2,4 +2,9 @@
 **/.vscode/
 **/.DS_Store
 results/
+artifact_eval/micro26/results*/
+artifact_eval/micro26/reproduced*/
+artifact_eval/micro26/reference_outputs/
+artifact_eval/micro26/data/azure/AzureLLMInferenceTrace_code_1day.csv
+artifact_eval/micro26/data/dvfs_lookup/
 **/.coverage

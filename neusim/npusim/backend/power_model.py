@@ -5,14 +5,14 @@ from math import ceil
 import numpy as np
 
 import neusim.npusim.frontend.Operator as Operator
-from neusim.npusim.frontend.Operator import DVFSPolicy, DVFSConfig, ComponentDVFSConfig
 from neusim.configs.chips.ChipConfig import ChipConfig
 from neusim.configs.power_gating.PowerGatingConfig import PowerGatingConfig
 from neusim.npusim.backend.dvfs_power_getter import (
-    get_power_from_dvfs,
     DVFS_VOLTAGE_REGULATOR_OVERHEAD_TABLE,
     FIXED_VOLTAGE_REGULATOR_OVERHEAD_TABLE,
+    get_power_from_dvfs,
 )
+from neusim.npusim.frontend.Operator import ComponentDVFSConfig, DVFSPolicy
 
 
 def compute_peak_sa_flops_per_sec_from_chip_config(config: ChipConfig) -> float:
@@ -150,19 +150,26 @@ def analyze_dynamic_energy(
     sa_flops_util = compute_sa_flops_util(op, config, op.dvfs_sa)
     vu_flops_util = compute_vu_flops_util(op, config, op.dvfs_vu)
 
-    # Dynamic powers
+    # Dynamic powers.  Preserve the legacy disable switch by assigning the
+    # aggregate chip power to the controller domain when DVFS is disabled.
     if config.enable_dvfs:
         sa_dyn_W, _ = get_power_from_dvfs("SA", op.dvfs_sa)
         vu_dyn_W, _ = get_power_from_dvfs("VU", op.dvfs_vu)
         sram_dyn_W, _ = get_power_from_dvfs("SRAM", op.dvfs_sram)
-        hbm_dyn_W, _ = get_power_from_dvfs("HBM", op.dvfs_hbm)
-        ici_dyn_W, _ = get_power_from_dvfs("ICI", op.dvfs_ici)
+        hbm_mc_dyn_W, _ = get_power_from_dvfs("hbm_mc", op.dvfs_hbm_mc)
+        hbm_die_dyn_W, _ = get_power_from_dvfs("hbm_die", op.dvfs_hbm_die)
+        hbm_io_dyn_W, _ = get_power_from_dvfs("hbm_io", op.dvfs_hbm_io)
+        ici_mc_dyn_W, _ = get_power_from_dvfs("ici_mc", op.dvfs_ici_mc)
+        ici_phy_dyn_W, _ = get_power_from_dvfs("ici_phy", op.dvfs_ici_phy)
     else:
         sa_dyn_W = config.dynamic_power_sa_W
         vu_dyn_W = config.dynamic_power_vu_W
         sram_dyn_W = config.dynamic_power_vmem_W
-        hbm_dyn_W = config.dynamic_power_hbm_W
-        ici_dyn_W = config.dynamic_power_ici_W
+        hbm_mc_dyn_W = config.dynamic_power_hbm_W
+        hbm_die_dyn_W = 0.0
+        hbm_io_dyn_W = 0.0
+        ici_mc_dyn_W = config.dynamic_power_ici_W
+        ici_phy_dyn_W = 0.0
 
     # 'other' still uses config (no DVFS enabled)
     other_dyn_W = config.dynamic_power_other_W
@@ -178,8 +185,11 @@ def analyze_dynamic_energy(
     op.stats.dynamic_energy_sa_J = sa_dyn_W * sa_time_ns * config.num_sa / 1e9 * sa_flops_util
     op.stats.dynamic_energy_vu_J = vu_dyn_W * vu_time_ns * config.num_vu / 1e9 * vu_flops_util
     op.stats.dynamic_energy_sram_J = sram_dyn_W * vmem_time_ns / 1e9
-    op.stats.dynamic_energy_ici_J = ici_dyn_W * ici_time_ns / 1e9
-    op.stats.dynamic_energy_hbm_J = hbm_dyn_W * hbm_time_ns / 1e9
+    op.stats.dynamic_energy_hbm_mc_J = hbm_mc_dyn_W * hbm_time_ns / 1e9
+    op.stats.dynamic_energy_hbm_die_J = hbm_die_dyn_W * hbm_time_ns / 1e9
+    op.stats.dynamic_energy_hbm_io_J = hbm_io_dyn_W * hbm_time_ns / 1e9
+    op.stats.dynamic_energy_ici_mc_J = ici_mc_dyn_W * ici_time_ns / 1e9
+    op.stats.dynamic_energy_ici_phy_J = ici_phy_dyn_W * ici_time_ns / 1e9
     op.stats.dynamic_energy_other_J = other_dyn_W * exe_time_ns / 1e9
 
     return op
@@ -226,7 +236,7 @@ def analyze_sa_static_energy(
         and pg_config.SA_spatial_granularity
         == PowerGatingConfig.SASpatialGranularity.PE
     ):  # used by HW and Full
-        assert isinstance(op.stats, (Operator.EinsumStatistics, Operator.FlashAttentionStatistics))
+        assert isinstance(op.stats, Operator.EinsumStatistics | Operator.FlashAttentionStatistics)
         overhead_ns_1 = ceil(
             op.stats.sa_time_ns / config.sa_dim * cycle_to_ns(
                 pg_config.sa_pe_pg_delay_cycles, config.freq_GHz
@@ -553,7 +563,7 @@ def analyze_vmem_static_energy(
     # compute vmem capacity utilization
     if op.op_type == Operator.OpType.MXU:
         assert isinstance(
-            op.stats, (Operator.EinsumStatistics, Operator.FlashAttentionStatistics)
+            op.stats, Operator.EinsumStatistics | Operator.FlashAttentionStatistics
         ), f"op_name: {op.name} :: op_type: {op.op_type}, opcode_type: {op.opcode_type}, opcode: {op.opcode} not supported for op.stats type {type(op.stats)}\nconfig: {op.config_str}"
         max_vmem_demand = op.stats.max_vmem_demand_bytes
         vmem_capacity_util = min(max_vmem_demand / vmem_size, 1.0)
@@ -739,17 +749,21 @@ def analyze_ici_static_energy(
     op: Operator.Operator, config: ChipConfig, pg_config: PowerGatingConfig
 ) -> Operator.Operator:
     """
-    Static power/energy analysis for ICI.
+    Static power/energy analysis for ICI (MC + PHY).
     """
     if config.enable_dvfs:
-        _, static_ici_W = get_power_from_dvfs("ICI", op.dvfs_ici)
+        _, static_ici_mc_W = get_power_from_dvfs("ici_mc", op.dvfs_ici_mc)
+        _, static_ici_phy_W = get_power_from_dvfs("ici_phy", op.dvfs_ici_phy)
     else:
-        static_ici_W = config.static_power_ici_W
+        static_ici_mc_W = config.static_power_ici_W
+        static_ici_phy_W = 0.0
+    static_ici_W = static_ici_mc_W + static_ici_phy_W
     pg_power_W = static_ici_W * pg_config.ici_power_level_factors[-1]
 
     # No power-gating
     if not pg_config.ici_PG_enabled:
-        op.stats.static_energy_ici_J = static_ici_W * op.stats.execution_time_ns / 1e9
+        op.stats.static_energy_ici_mc_J = static_ici_mc_W * op.stats.execution_time_ns / 1e9
+        op.stats.static_energy_ici_phy_J = static_ici_phy_W * op.stats.execution_time_ns / 1e9
         return op
 
     # assert (
@@ -777,6 +791,15 @@ def analyze_ici_static_energy(
     ):
         raise NotImplementedError()  # TODO
 
+    # Helper to split combined ICI static energy into MC/PHY proportionally
+    def _split_ici_energy(total_energy_J: float):
+        if static_ici_W > 0:
+            mc_ratio = static_ici_mc_W / static_ici_W
+        else:
+            mc_ratio = 0.5
+        op.stats.static_energy_ici_mc_J = total_energy_J * mc_ratio
+        op.stats.static_energy_ici_phy_J = total_energy_J * (1.0 - mc_ratio)
+
     if (
         pg_config.ici_temporal_granularity
         == PowerGatingConfig.TemporalGranularity.INSTRUCTION
@@ -785,7 +808,7 @@ def analyze_ici_static_energy(
     ):
         pg_energy = pg_power_W * (exe_time_ns - ici_time_ns) / 1e9
         static_energy = static_ici_W * ici_time_ns / 1e9
-        op.stats.static_energy_ici_J = pg_energy + static_energy
+        _split_ici_energy(pg_energy + static_energy)
         return op
 
     if (
@@ -803,9 +826,9 @@ def analyze_ici_static_energy(
         == PowerGatingConfig.ICISpatialGranularity.COMPONENT
     ):
         if ici_time_ns > 0:
-            op.stats.static_energy_ici_J = static_ici_W * exe_time_ns / 1e9
+            _split_ici_energy(static_ici_W * exe_time_ns / 1e9)
         else:
-            op.stats.static_energy_ici_J = pg_power_W * exe_time_ns / 1e9
+            _split_ici_energy(pg_power_W * exe_time_ns / 1e9)
         return op
 
     if (
@@ -832,18 +855,35 @@ def analyze_hbm_static_energy(
     op: Operator.Operator, config: ChipConfig, pg_config: PowerGatingConfig
 ) -> Operator.Operator:
     """
-    Static power/energy analysis for HBM.
+    Static power/energy analysis for HBM (MC + PHY).
     """
     if config.enable_dvfs:
-        _, static_hbm_W = get_power_from_dvfs("HBM", op.dvfs_hbm)
+        _, static_hbm_mc_W = get_power_from_dvfs("hbm_mc", op.dvfs_hbm_mc)
+        _, static_hbm_die_W = get_power_from_dvfs("hbm_die", op.dvfs_hbm_die)
+        _, static_hbm_io_W = get_power_from_dvfs("hbm_io", op.dvfs_hbm_io)
     else:
-        static_hbm_W = config.static_power_hbm_W
-    pg_power_W = static_hbm_W * pg_config.hbm_power_level_factors[-1]
+        static_hbm_mc_W = config.static_power_hbm_mc_W
+        static_hbm_die_W = config.static_power_hbm_die_W
+        static_hbm_io_W = config.static_power_hbm_io_W
+    # Only MC is power-gatable; die and IO remain always-on.
+    pg_mc_power_W = static_hbm_mc_W * pg_config.hbm_power_level_factors[-1]
 
     # No power-gating
     if not pg_config.hbm_PG_enabled:
-        op.stats.static_energy_hbm_J = (
-            static_hbm_W * op.stats.execution_time_ns / 1e9
+        op.stats.static_energy_hbm_mc_J = static_hbm_mc_W * op.stats.execution_time_ns / 1e9
+        op.stats.static_energy_hbm_die_J = static_hbm_die_W * op.stats.execution_time_ns / 1e9
+        op.stats.static_energy_hbm_io_J = static_hbm_io_W * op.stats.execution_time_ns / 1e9
+        return op
+
+    # Die and IO are always-on regardless of PG.
+    op.stats.static_energy_hbm_die_J = static_hbm_die_W * op.stats.execution_time_ns / 1e9
+    op.stats.static_energy_hbm_io_J = static_hbm_io_W * op.stats.execution_time_ns / 1e9
+
+    # An unused HBM has no active periods to divide into. Its controller may
+    # remain at the configured gated level while die and I/O stay always-on.
+    if op.stats.memory_time_ns <= 0 or op.stats.memory_traffic_bytes <= 0:
+        op.stats.static_energy_hbm_mc_J = (
+            pg_mc_power_W * op.stats.execution_time_ns / 1e9
         )
         return op
 
@@ -854,7 +894,7 @@ def analyze_hbm_static_energy(
         active_length_ns = (
             4 * 1024 * 1024 / (config.hbm_bw_GBps * 1024 * 1024 * 1024) * 1e9
         )
-    hbm_util = op.stats.memory_time_ns / op.stats.execution_time_ns
+    op.stats.memory_time_ns / op.stats.execution_time_ns
     num_periods = ceil(
         op.stats.memory_time_ns / active_length_ns
     )
@@ -868,19 +908,19 @@ def analyze_hbm_static_energy(
 
     if pg_config.hbm_PG_policy == PowerGatingConfig.PowerGatingPolicy.SW:
         if idle_length_ns >= BET_ns:
-            # power gate HBM
-            pg_energy = pg_power_W * (op.stats.execution_time_ns - op.stats.memory_time_ns) / 1e9
-            static_energy = op.stats.memory_time_ns / 1e9 * static_hbm_W
-            op.stats.static_energy_hbm_J = pg_energy + static_energy
+            # power gate HBM MC only
+            pg_mc_energy = pg_mc_power_W * (op.stats.execution_time_ns - op.stats.memory_time_ns) / 1e9
+            active_mc_energy = static_hbm_mc_W * op.stats.memory_time_ns / 1e9
+            op.stats.static_energy_hbm_mc_J = pg_mc_energy + active_mc_energy
         else:
-            # do not power gate HBM
-            op.stats.static_energy_hbm_J = static_hbm_W * op.stats.execution_time_ns / 1e9
+            # do not power gate HBM MC
+            op.stats.static_energy_hbm_mc_J = static_hbm_mc_W * op.stats.execution_time_ns / 1e9
     elif pg_config.hbm_PG_policy == PowerGatingConfig.PowerGatingPolicy.HW:
         if idle_length_ns >= idle_detect_timeout_ns:
-            # power gate HBM
-            pg_energy = pg_power_W * (op.stats.execution_time_ns - op.stats.memory_time_ns) / 1e9
-            static_energy = op.stats.memory_time_ns / 1e9 * static_hbm_W
-            op.stats.static_energy_hbm_J = pg_energy + static_energy
+            # power gate HBM MC only
+            pg_mc_energy = pg_mc_power_W * (op.stats.execution_time_ns - op.stats.memory_time_ns) / 1e9
+            active_mc_energy = static_hbm_mc_W * op.stats.memory_time_ns / 1e9
+            op.stats.static_energy_hbm_mc_J = pg_mc_energy + active_mc_energy
 
             # calculate PG delay overhead and update op stats
             pg_delay_ns = ceil(
@@ -888,8 +928,8 @@ def analyze_hbm_static_energy(
             )
             op.stats.memory_time_ns += pg_delay_ns
         else:
-            # do not power gate HBM
-            op.stats.static_energy_hbm_J = static_hbm_W * op.stats.execution_time_ns / 1e9
+            # do not power gate HBM MC
+            op.stats.static_energy_hbm_mc_J = static_hbm_mc_W * op.stats.execution_time_ns / 1e9
     else:
         raise NotImplementedError("Unknown HBM power gating policy")
 
@@ -921,10 +961,16 @@ def add_op_dvfs_exe_time_overhead(op: Operator.Operator, config: ChipConfig) -> 
             return op.dvfs_sa
         elif comp == "vu":
             return op.dvfs_vu
-        elif comp == "hbm":
-            return op.dvfs_hbm
-        elif comp == "ici":
-            return op.dvfs_ici
+        elif comp == "hbm_mc":
+            return op.dvfs_hbm_mc
+        elif comp == "hbm_die":
+            return op.dvfs_hbm_die
+        elif comp == "hbm_io":
+            return op.dvfs_hbm_io
+        elif comp == "ici_mc":
+            return op.dvfs_ici_mc
+        elif comp == "ici_phy":
+            return op.dvfs_ici_phy
         elif comp == "vmem":
             return op.dvfs_sram
         else:
@@ -935,10 +981,16 @@ def add_op_dvfs_exe_time_overhead(op: Operator.Operator, config: ChipConfig) -> 
             op.stats.sa_time_ns += st_ns
         elif comp == "vu":
             op.stats.vu_time_ns += st_ns
-        elif comp == "hbm":
+        elif comp == "hbm_mc":
             op.stats.memory_time_ns += st_ns
-        elif comp == "ici":
+        elif comp == "hbm_die":
+            pass  # HBM die runs at fixed voltage, no scaling time overhead
+        elif comp == "hbm_io":
+            pass  # HBM I/O runs at fixed voltage, no scaling time overhead
+        elif comp == "ici_mc":
             op.stats.ici_time_ns += st_ns
+        elif comp == "ici_phy":
+            pass  # PHY runs at fixed voltage, no scaling time overhead
         elif comp == "vmem":
             op.stats.vmem_time_ns += st_ns
         else:
@@ -948,27 +1000,29 @@ def add_op_dvfs_exe_time_overhead(op: Operator.Operator, config: ChipConfig) -> 
         if comp in ["sa", "vu"]:
             # for SA and VU, activity factor is spatial utilization (e.g., FLOPS)
             return min(1, op.stats.flops_util)
-        elif comp in ["hbm", "ici", "vmem"]:
+        elif comp in ["hbm_mc", "hbm_die", "hbm_io", "ici_mc", "ici_phy", "vmem"]:
             # for other components, activity factor is time utilization
-            time_ns = {
-                "hbm": op.stats.memory_time_ns,
-                "ici": op.stats.ici_time_ns,
+            time_map = {
+                "hbm_mc": op.stats.memory_time_ns,
+                "hbm_die": op.stats.memory_time_ns,
+                "hbm_io": op.stats.memory_time_ns,
+                "ici_mc": op.stats.ici_time_ns,
+                "ici_phy": op.stats.ici_time_ns,
                 "vmem": op.stats.vmem_time_ns,
-            }[comp]
-            util = min(1, time_ns / op.stats.execution_time_ns)
+            }
+            util = min(1, time_map[comp] / op.stats.execution_time_ns)
             return util
         else:
             raise ValueError(f"Unknown component '{comp}'")
 
     def _lookup_efficiency_from_table(scaling_time_ns: int, activity: float, voltage: float, policy: DVFSPolicy) -> float:
-        if policy == DVFSPolicy.NONE:
+        if policy == DVFSPolicy.NONE or scaling_time_ns == 0:
             table = FIXED_VOLTAGE_REGULATOR_OVERHEAD_TABLE
+            rows = list(table)  # FIXED table has no scaling_time dimension
         else:
             table = DVFS_VOLTAGE_REGULATOR_OVERHEAD_TABLE
-
-        # filter out scaling time
-        rows = [r for r in table if r.scaling_time_ns == scaling_time_ns]
-        assert len(rows) > 0, f"No DVFS overhead table entry for scaling_time_ns={scaling_time_ns}"
+            rows = [r for r in table if r.scaling_time_ns == scaling_time_ns]
+            assert len(rows) > 0, f"No DVFS overhead table entry for scaling_time_ns={scaling_time_ns}"
 
         # pick the nearest voltage that is greater than or equal to requested voltage
         voltages = sorted(set(r.voltage_V for r in rows))
@@ -977,7 +1031,8 @@ def add_op_dvfs_exe_time_overhead(op: Operator.Operator, config: ChipConfig) -> 
             if v >= voltage:
                 v_snap = v
                 break
-        assert v_snap is not None, f"No DVFS overhead table entry for voltage_V >= {voltage}, scaling_time_ns={scaling_time_ns}, activity_factor={activity}"
+        if v_snap is None:
+            v_snap = voltages[-1]  # use highest available voltage if none >= requested
         rows = [r for r in rows if r.voltage_V == v_snap]
 
         # pick the row with smallest activity factor >= requested activity
@@ -993,11 +1048,14 @@ def add_op_dvfs_exe_time_overhead(op: Operator.Operator, config: ChipConfig) -> 
 
     # component execution times
     comp_times: dict[str, int] = {
-        "sa":   op.stats.sa_time_ns,
-        "vu":   op.stats.vu_time_ns,
-        "hbm":  op.stats.memory_time_ns,
-        "ici":  op.stats.ici_time_ns,
-        "vmem": op.stats.vmem_time_ns,
+        "sa":       op.stats.sa_time_ns,
+        "vu":       op.stats.vu_time_ns,
+        "hbm_mc":   op.stats.memory_time_ns,
+        "hbm_die":  op.stats.memory_time_ns,
+        "hbm_io":   op.stats.memory_time_ns,
+        "ici_mc":   op.stats.ici_time_ns,
+        "ici_phy":  op.stats.ici_time_ns,
+        "vmem":     op.stats.vmem_time_ns,
     }
 
     for comp, t_ns in comp_times.items():
@@ -1015,7 +1073,7 @@ def add_op_dvfs_exe_time_overhead(op: Operator.Operator, config: ChipConfig) -> 
         )
 
         if t_ns > 0 and dvfs_policy not in [DVFSPolicy.NONE, DVFSPolicy.IDEAL]:
-            # if component is unused, do not change execution time
+            # t_ns > 0 check: if component is unused, do not change execution time
             _apply_exe_time_overhead_for_component(comp, dvfs_config.voltage_regulator_scaling_time_ns)
         dvfs_config.voltage_conversion_power_efficiency_percent = chosen_eff
 
@@ -1068,12 +1126,24 @@ def apply_regulator_efficiency(op: Operator.Operator) -> Operator.Operator:
     op.stats.dynamic_energy_sram_J *= 100.0 / op.dvfs_sram.voltage_conversion_power_efficiency_percent
     op.stats.static_energy_sram_J *= 100.0 / op.dvfs_sram.voltage_conversion_power_efficiency_percent
 
-    # HBM
-    op.stats.dynamic_energy_hbm_J *= 100.0 / op.dvfs_hbm.voltage_conversion_power_efficiency_percent
-    op.stats.static_energy_hbm_J *= 100.0 / op.dvfs_hbm.voltage_conversion_power_efficiency_percent
+    # HBM MC
+    op.stats.dynamic_energy_hbm_mc_J *= 100.0 / op.dvfs_hbm_mc.voltage_conversion_power_efficiency_percent
+    op.stats.static_energy_hbm_mc_J *= 100.0 / op.dvfs_hbm_mc.voltage_conversion_power_efficiency_percent
 
-    # ICI
-    op.stats.dynamic_energy_ici_J *= 100.0 / op.dvfs_ici.voltage_conversion_power_efficiency_percent
-    op.stats.static_energy_ici_J *= 100.0 / op.dvfs_ici.voltage_conversion_power_efficiency_percent
+    # HBM Die
+    op.stats.dynamic_energy_hbm_die_J *= 100.0 / op.dvfs_hbm_die.voltage_conversion_power_efficiency_percent
+    op.stats.static_energy_hbm_die_J *= 100.0 / op.dvfs_hbm_die.voltage_conversion_power_efficiency_percent
+
+    # HBM I/O
+    op.stats.dynamic_energy_hbm_io_J *= 100.0 / op.dvfs_hbm_io.voltage_conversion_power_efficiency_percent
+    op.stats.static_energy_hbm_io_J *= 100.0 / op.dvfs_hbm_io.voltage_conversion_power_efficiency_percent
+
+    # ICI MC
+    op.stats.dynamic_energy_ici_mc_J *= 100.0 / op.dvfs_ici_mc.voltage_conversion_power_efficiency_percent
+    op.stats.static_energy_ici_mc_J *= 100.0 / op.dvfs_ici_mc.voltage_conversion_power_efficiency_percent
+
+    # ICI PHY
+    op.stats.dynamic_energy_ici_phy_J *= 100.0 / op.dvfs_ici_phy.voltage_conversion_power_efficiency_percent
+    op.stats.static_energy_ici_phy_J *= 100.0 / op.dvfs_ici_phy.voltage_conversion_power_efficiency_percent
 
     return op

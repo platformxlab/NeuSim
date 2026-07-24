@@ -1,0 +1,20 @@
+{
+  "prefill": {
+    "count": 1,
+    "npu_type": "4",
+    "num_chips": 4,
+    "batch_size": 1,
+    "dp": 1,
+    "tp": 4,
+    "pp": 1
+  },
+  "decode": {
+    "count": 1,
+    "npu_type": "4",
+    "num_chips": 4,
+    "batch_size": 1,
+    "dp": 1,
+    "tp": 4,
+    "pp": 1
+  }
+}
