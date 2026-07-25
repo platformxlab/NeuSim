@@ -1,6 +1,6 @@
 from math import ceil
 
-from pydantic import TypeAdapter, model_validator
+from pydantic import model_validator
 
 import neusim.configs.models.ModelConfig as ModelConfig
 
@@ -125,6 +125,13 @@ class MoELLMConfig(LLMConfig):
     num_expert_parallel_axes: int = 1
     expert_parallel_degree_dcn: int = 1
 
+    def get_chip_version_and_parallelism_degree_tuple(self) -> tuple:
+        """Include expert parallelism in FleetSim's deployed-vPod identity."""
+        return super().get_chip_version_and_parallelism_degree_tuple() + (
+            self.expert_parallelism_degree,
+            self.expert_parallel_degree_dcn,
+        )
+
     @property
     def expert_tensor_parallelism_degree(self) -> int:
         '''
@@ -243,6 +250,9 @@ class DeepSeekConfig(MoELLMConfig):
 
     num_dense_layers: int = 1
     '''Number of dense layers in the model. Will be the first layer(s) in the model.'''
+
+    use_flash_attention: bool = False
+    '''MLA does not currently support the flash-attention implementation.'''
 
     # MLA configs
     kv_lora_rank: int

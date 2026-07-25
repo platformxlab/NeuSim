@@ -1,0 +1,11 @@
+# Inputs downloaded from the supplementary repository or extracted locally
+/data/AzureLLMInferenceTrace_code_3h_sampled.csv
+/data/AzureLLMInferenceTrace_code_3h_sampled.zip
+/data/request_lookup_cache_deepseekv3_azure_3h_v5p_v6e.zip
+/request_lookup_cache_deepseekv3_azure_3h_v5p_v6e.zip
+/request_lookup_cache_deepseekv3_azure_3h/
+/.request_lookup_cache_deepseekv3_azure_3h.*/
+
+# Generated simulator caches and raw results
+/.cache/
+/results*/

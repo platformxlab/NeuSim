@@ -1,5 +1,7 @@
 import unittest
-from neusim.configs.models.LLMConfig import LLMConfig, MoELLMConfig, DeepSeekConfig
+
+from neusim.configs.models.LLMConfig import DeepSeekConfig, LLMConfig, MoELLMConfig
+
 
 class TestLLMConfig(unittest.TestCase):
     def test_llm_config(self):
@@ -19,6 +21,17 @@ class TestLLMConfig(unittest.TestCase):
         self.assertEqual(hash(config1), hash(config2))
 
 class TestMoELLMConfig(unittest.TestCase):
+    def test_fleetsim_parallelism_identity_includes_expert_parallelism(self):
+        config = MoELLMConfig(
+            name="6e",
+            expert_parallelism_degree=8,
+            expert_parallel_degree_dcn=2,
+        )
+
+        identity = config.get_chip_version_and_parallelism_degree_tuple()
+        self.assertEqual(identity[-2:], (8, 2))
+        self.assertEqual(identity[0], "6e")
+
     def test_moe_llm_config(self):
         # Test default init
         config = MoELLMConfig()

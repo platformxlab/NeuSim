@@ -1,6 +1,11 @@
 import unittest
 
-from neusim.npusim.frontend.Operator import DVFSPolicy, DVFSConfig, ComponentDVFSConfig
+from neusim.npusim.frontend.Operator import Operator, DVFSPolicy, DVFSConfig, ComponentDVFSConfig
+from neusim.npusim.backend.dvfs_power_getter import (
+    SA_POINTS,
+    SRAM_POINTS,
+    VU_POINTS,
+)
 from neusim.npusim.backend.dvfs_policy_lib import (
     slowdown_freq,
     pick_v_from_freq,
@@ -80,6 +85,94 @@ class TestGetDvfsConfig(unittest.TestCase):
         dvfs_cfg.policy = "UNSUPPORTED"
         with self.assertRaises((ValueError, AttributeError)):
             get_dvfs_config(op, config, dvfs_cfg)
+
+
+class TestIntegratedPolicies(unittest.TestCase):
+    @staticmethod
+    def _memory_bound_op() -> Operator:
+        op = Operator(name="memory_bound")
+        op.stats.execution_time_ns = 100
+        op.stats.sa_time_ns = 20
+        op.stats.vu_time_ns = 30
+        op.stats.vmem_time_ns = 40
+        op.stats.memory_time_ns = 100
+        op.stats.ici_time_ns = 0
+        op.stats.bounded_by = "Memory"
+        return op
+
+    def test_direct_customall_couples_full_hbm_but_custom_does_not(self):
+        from neusim.configs.chips.ChipConfig import ChipConfig
+
+        op = self._memory_bound_op()
+        chip = ChipConfig(freq_GHz=1.7)
+        custom = get_dvfs_config(
+            op, chip, DVFSConfig(policy=DVFSPolicy.CUSTOM)
+        )
+        custom_all = get_dvfs_config(
+            op, chip, DVFSConfig(policy=DVFSPolicy.CUSTOM_ALL)
+        )
+
+        self.assertEqual(custom["hbm_die"].policy, DVFSPolicy.NONE)
+        self.assertEqual(custom["hbm_io"].policy, DVFSPolicy.NONE)
+        self.assertEqual(custom_all["hbm_die"].policy, DVFSPolicy.CUSTOM)
+        self.assertEqual(custom_all["hbm_io"].policy, DVFSPolicy.CUSTOM)
+        self.assertEqual(
+            custom_all["hbm_die"].frequency_GHz,
+            custom_all["hbm_mc"].frequency_GHz,
+        )
+        self.assertEqual(
+            custom_all["hbm_io"].frequency_GHz,
+            custom_all["hbm_mc"].frequency_GHz,
+        )
+
+    def test_dom3_couples_compute_voltage_and_frequency(self):
+        from neusim.configs.chips.ChipConfig import ChipConfig
+
+        plan = get_dvfs_config(
+            self._memory_bound_op(),
+            ChipConfig(freq_GHz=1.7),
+            DVFSConfig(
+                policy=DVFSPolicy.CUSTOM_ALL,
+                custom_compute_domain_mode="dom3",
+            ),
+        )
+        compute_vf = {
+            (plan[name].voltage_V, plan[name].frequency_GHz)
+            for name in ("sa", "vu", "sram")
+        }
+        self.assertEqual(len(compute_vf), 1)
+
+    def test_dvfsc_couples_compute_and_leaves_memory_at_peak(self):
+        from neusim.configs.chips.ChipConfig import ChipConfig
+
+        plan = get_dvfs_config(
+            self._memory_bound_op(),
+            ChipConfig(freq_GHz=1.7),
+            DVFSConfig(policy=DVFSPolicy.DVFS_C),
+        )
+        compute_vf = {
+            (plan[name].voltage_V, plan[name].frequency_GHz)
+            for name in ("sa", "vu", "sram")
+        }
+        self.assertEqual(len(compute_vf), 1)
+        shared_frequency = plan["sa"].frequency_GHz
+        self.assertIsNotNone(shared_frequency)
+
+        def required_voltage(points):
+            for point in sorted(points, key=lambda item: item.frequency_GHz):
+                if point.frequency_GHz >= shared_frequency - 1e-9:
+                    return point.voltage_V
+            return points[-1].voltage_V
+
+        expected_voltage = max(
+            required_voltage(points)
+            for points in (SA_POINTS, VU_POINTS, SRAM_POINTS)
+        )
+        self.assertEqual(plan["sa"].voltage_V, expected_voltage)
+        self.assertEqual(plan["hbm_mc"].policy, DVFSPolicy.NONE)
+        self.assertEqual(plan["ici_mc"].policy, DVFSPolicy.NONE)
+        self.assertIs(plan["hbm"], plan["hbm_mc"])
+        self.assertIs(plan["ici"], plan["ici_mc"])
 
 
 if __name__ == "__main__":

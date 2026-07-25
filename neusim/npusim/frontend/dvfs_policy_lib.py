@@ -11,5 +11,6 @@ from neusim.npusim.backend.dvfs_policy_lib import (  # noqa: F401
     comp,
     get_dvfs_policy_None,
     get_dvfs_policy_Ideal,
+    get_dvfs_policy_compute_only,
     get_dvfs_config,
 )

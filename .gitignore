@@ -2,4 +2,5 @@
 **/.vscode/
 **/.DS_Store
 results/
+artifact_eval/micro26/results*/
 **/.coverage

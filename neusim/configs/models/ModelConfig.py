@@ -23,6 +23,25 @@ class ModelConfig(ChipConfig.ChipConfig, SystemConfig.SystemConfig):
 
     output_file_path: str = "./output.csv"
 
+    def get_chip_version_and_parallelism_degree_tuple(self) -> tuple:
+        """Return the hardware/parallelism identity used by FleetSim.
+
+        Sequence lengths, batch sizes, and model dimensions are deliberately omitted:
+        FleetSim uses this key to track one deployed vPod configuration while the
+        request shape changes.
+        """
+        return (
+            self.name,
+            self.microbatch_size_ici,
+            self.microbatch_size_dcn,
+            self.data_parallelism_degree,
+            self.tensor_parallelism_degree,
+            self.pipeline_parallelism_degree,
+            self.data_parallel_degree_dcn,
+            self.tensor_parallel_degree_dcn,
+            self.pipeline_parallel_degree_dcn,
+        )
+
     def __hash__(self) -> int:
         '''
         Just hash some critical fields of the config.

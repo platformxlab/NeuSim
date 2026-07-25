@@ -4,6 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "neusim"
+requires-python = ">=3.12"
 authors = [{name = "Yuqi Xue", email = "yuqixue2@illinois.edu"}]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -51,3 +52,6 @@ markers = [
     "slow: marks tests as slow (skipped unless --runslow or NEUSIM_RUN_SLOW_TESTS=1)",
     "regression: regression tests comparing against previous commit",
 ]
+
+[tool.flit.sdist]
+include = ["configs/**/*.json"]

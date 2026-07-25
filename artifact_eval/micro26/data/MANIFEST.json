@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "artifact": "NeuScale MICRO 2026 three-hour functional sample",
+  "modified": "2026-07-24",
+  "supplementary_repository": {
+    "url": "https://github.com/XZman/micro26ae_supplementary_files",
+    "archives": [
+      {
+        "name": "AzureLLMInferenceTrace_code_3h_sampled.zip",
+        "bytes": 37024,
+        "sha256": "4bd1a1b0715d894582370a4238195afc2a518a3fbaa0d5ff60ba23bb135fb427",
+        "extract_to": "artifact_eval/micro26/data",
+        "layout": "AzureLLMInferenceTrace_code_3h_sampled.csv at archive root"
+      },
+      {
+        "name": "request_lookup_cache_deepseekv3_azure_3h_v5p_v6e.zip",
+        "bytes": 6662623,
+        "sha256": "30f0989dddb13c58c7129f1a92521403495344b3f4cb9eb90867df57b506133e",
+        "extract_to": "artifact_eval/micro26",
+        "layout": "request_lookup_cache_deepseekv3_azure_3h/ as the single top-level directory"
+      }
+    ]
+  },
+  "source": {
+    "dataset": "AzurePublicDataset sampled Code trace",
+    "derived_from": "AzureLLMInferenceTrace_code_1week_sampled.csv"
+  },
+  "tracked_files": [
+    {
+      "path": "AzureLLMInferenceDataset2024.md",
+      "bytes": 2501,
+      "sha256": "e63b1037da03bccd73cdcab0c4cad4dda3caf5bc06545e5d9bfb3dc4bdd51d09",
+      "role": "upstream Azure dataset description and attribution"
+    },
+    {
+      "path": "AzurePublicDataset_LICENSE.txt",
+      "bytes": 18653,
+      "sha256": "9bbc1ea9fe5c96df01b311a2ac864d5b18fc87b9948bfd14770e4b44db755ee9",
+      "role": "upstream CC BY 4.0 license"
+    }
+  ],
+  "extracted_inputs": [
+    {
+      "path": "data/AzureLLMInferenceTrace_code_3h_sampled.csv",
+      "bytes": 139052,
+      "sha256": "ca839c87acaf48e7591daf29369790909d051b5dce8a09653fb62aedf86f9634",
+      "request_count": 3460,
+      "window_hours": 3.0
+    },
+    {
+      "path": "request_lookup_cache_deepseekv3_azure_3h/",
+      "regular_files": 2943,
+      "json_data_files": 2942,
+      "embedded_manifest": "micro26ae_sample_cache_manifest.json"
+    }
+  ],
+  "sample": {
+    "model": "deepseekv3-671b",
+    "goals": ["energy", "monetary"],
+    "phases": ["prefill", "decode"],
+    "npu_versions": ["5p", "6e"],
+    "padded_sequence_pairs": 368,
+    "rank": 1,
+    "cache": {
+      "regular_files": 2943,
+      "json_data_files": 2942,
+      "raw_file_bytes": 16617853,
+      "unavailable_or_infeasible_leaves": 2,
+      "lookups_requiring_smaller_sequence_fallback": 0,
+      "embedded_manifest": "micro26ae_sample_cache_manifest.json",
+      "archive_format": "ZIP with normalized 1980-01-01 member timestamps"
+    }
+  }
+}

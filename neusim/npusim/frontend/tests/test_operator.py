@@ -2,7 +2,7 @@ import unittest
 from neusim.npusim.frontend.Operator import (
     Operator, EinsumOperator, Conv2DOperator, FlashAttentionOperator,
     OperatorStatistics, EinsumStatistics, FlashAttentionStatistics,
-    Axis, Tensor, DVFSPolicy, OpcodeType, OpType,
+    Axis, Tensor, ComponentDVFSConfig, DVFSConfig, DVFSPolicy, OpcodeType, OpType,
     from_csv_dict, to_csv_dict
 )
 
@@ -11,6 +11,9 @@ class TestOperator(unittest.TestCase):
         # DVFSPolicy
         self.assertEqual(DVFSPolicy.from_str("Ideal"), DVFSPolicy.IDEAL)
         self.assertEqual(DVFSPolicy.from_str(None), DVFSPolicy.NONE)
+        self.assertEqual(DVFSPolicy.from_str(""), DVFSPolicy.NONE)
+        self.assertEqual(DVFSPolicy.from_str("DVFSCNoPareto"), DVFSPolicy.DVFS_C_NO_PARETO)
+        self.assertEqual(DVFSPolicy.from_str("CustomAll"), DVFSPolicy.CUSTOM_ALL)
         # Verify ValueError is raised for unknown strings, as per implicit behavior of Enum(value)
         with self.assertRaises(ValueError):
             DVFSPolicy.from_str("Unknown")
@@ -126,3 +129,72 @@ class TestOperator(unittest.TestCase):
         op = from_csv_dict(op_dict)
         self.assertEqual(op.dvfs_sa.policy, DVFSPolicy.IDEAL)
         self.assertEqual(op.dvfs_sa.voltage_V, 0.8)
+
+
+    def test_dvfs_config_hash_covers_region_and_domain_mode(self):
+        base = DVFSConfig()
+        region = DVFSConfig(frequency_adjustment_interval_ns=2_000_000)
+        domain = DVFSConfig(custom_compute_domain_mode="dom3")
+        self.assertNotEqual(hash(base), hash(region))
+        self.assertNotEqual(hash(base), hash(domain))
+
+    def test_split_energy_aggregates_and_legacy_setters(self):
+        stats = OperatorStatistics(
+            static_energy_hbm_mc_J=1.0,
+            static_energy_hbm_die_J=2.0,
+            static_energy_hbm_io_J=3.0,
+            static_energy_ici_mc_J=4.0,
+            static_energy_ici_phy_J=5.0,
+        )
+        self.assertEqual(stats.static_energy_hbm_J, 6.0)
+        self.assertEqual(stats.static_energy_hbm_phy_J, 5.0)
+        self.assertEqual(stats.static_energy_ici_J, 9.0)
+
+        stats.dynamic_energy_hbm_J = 7.0
+        stats.dynamic_energy_ici_J = 8.0
+        self.assertEqual(stats.dynamic_energy_hbm_mc_J, 7.0)
+        self.assertEqual(stats.dynamic_energy_hbm_die_J, 0.0)
+        self.assertEqual(stats.dynamic_energy_hbm_io_J, 0.0)
+        self.assertEqual(stats.dynamic_energy_ici_mc_J, 8.0)
+        self.assertEqual(stats.dynamic_energy_ici_phy_J, 0.0)
+
+    def test_legacy_dvfs_assignment_and_csv_fallback(self):
+        op = Operator()
+        hbm = ComponentDVFSConfig(
+            policy=DVFSPolicy.CUSTOM, voltage_V=0.55, frequency_GHz=1.1
+        )
+        ici = ComponentDVFSConfig(
+            policy=DVFSPolicy.IDEAL, voltage_V=0.6, frequency_GHz=1.2
+        )
+        op.dvfs_hbm = hbm
+        op.dvfs_ici = ici
+        self.assertIs(op.dvfs_hbm_mc, hbm)
+        self.assertIs(op.dvfs_ici_mc, ici)
+
+        written = op.to_csv_dict()
+        self.assertEqual(written["DVFS HBM Policy"], "Custom")
+        self.assertEqual(written["DVFS HBM MC Policy"], "Custom")
+        self.assertEqual(written["DVFS ICI Policy"], "Ideal")
+        self.assertEqual(written["DVFS ICI MC Policy"], "Ideal")
+
+        legacy = dict(written)
+        for prefix in ("HBM MC", "HBM DIE", "HBM IO", "ICI MC", "ICI PHY"):
+            for suffix in (
+                "Policy",
+                "Voltage (V)",
+                "Frequency (GHz)",
+                "Scaling Time (ns)",
+                "Power Efficiency (%)",
+            ):
+                legacy.pop(f"DVFS {prefix} {suffix}", None)
+        restored = from_csv_dict(legacy)
+        self.assertEqual(restored.dvfs_hbm_mc.policy, DVFSPolicy.CUSTOM)
+        self.assertEqual(restored.dvfs_hbm_mc.voltage_V, 0.55)
+        self.assertEqual(restored.dvfs_ici_mc.policy, DVFSPolicy.IDEAL)
+        self.assertEqual(restored.dvfs_ici_mc.frequency_GHz, 1.2)
+        self.assertEqual(restored.dvfs_hbm_die.policy, DVFSPolicy.NONE)
+        self.assertEqual(restored.dvfs_hbm_io.policy, DVFSPolicy.NONE)
+        self.assertEqual(restored.dvfs_ici_phy.policy, DVFSPolicy.NONE)
+        self.assertIsNone(restored.dvfs_hbm_die.frequency_GHz)
+        self.assertIsNone(restored.dvfs_hbm_io.frequency_GHz)
+        self.assertIsNone(restored.dvfs_ici_phy.frequency_GHz)

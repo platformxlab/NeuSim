@@ -76,13 +76,33 @@ def get_base_op_dict() -> dict[str, Any]:
         "DVFS SRAM Voltage (V)": 0.0,
         "DVFS SRAM Frequency (GHz)": 0.0,
 
+        # Legacy aggregate columns written by pre-split NeuSim releases.
         "DVFS HBM Policy": "None",
         "DVFS HBM Voltage (V)": 0.0,
         "DVFS HBM Frequency (GHz)": 0.0,
-
         "DVFS ICI Policy": "None",
         "DVFS ICI Voltage (V)": 0.0,
         "DVFS ICI Frequency (GHz)": 0.0,
+
+        "DVFS HBM MC Policy": "None",
+        "DVFS HBM MC Voltage (V)": 0.0,
+        "DVFS HBM MC Frequency (GHz)": 0.0,
+
+        "DVFS HBM DIE Policy": "None",
+        "DVFS HBM DIE Voltage (V)": 0.0,
+        "DVFS HBM DIE Frequency (GHz)": 0.0,
+
+        "DVFS HBM IO Policy": "None",
+        "DVFS HBM IO Voltage (V)": 0.0,
+        "DVFS HBM IO Frequency (GHz)": 0.0,
+
+        "DVFS ICI MC Policy": "None",
+        "DVFS ICI MC Voltage (V)": 0.0,
+        "DVFS ICI MC Frequency (GHz)": 0.0,
+
+        "DVFS ICI PHY Policy": "None",
+        "DVFS ICI PHY Voltage (V)": 0.0,
+        "DVFS ICI PHY Frequency (GHz)": 0.0,
     }
 
 class DVFSPolicy(str, Enum):
@@ -95,14 +115,22 @@ class DVFSPolicy(str, Enum):
     '''No DVFS applied.'''
     DVFS_C = "DVFSC"
     '''Only DVFS the compute domain, leave the memory domain at peak V/f.'''
+    DVFS_C_NO_PARETO = "DVFSCNoPareto"
+    '''Same as DVFS_C but gives the GA all evaluated points instead of only the Pareto front.'''
+    DVFS_C_ms = "DVFSCms"
+    '''Compute-domain DVFS with one shared plan per count-aware >=interval region occurrence.'''
     CUSTOM = "Custom"
     '''Our own policy for operator-level component-wise DVFS w/o performance degradation.'''
+    CUSTOM_ALL = "CustomAll"
+    '''Custom policy with full HBM DVFS (MC + Die + IO link coupled by bandwidth).'''
+    CUSTOM_ALL_ms = "CustomAllms"
+    '''Full eNPU DVFS with one eight-domain plan per count-compatible >=interval region.'''
     PERF_DEGRAD = "PerfDegrad"
-    '''Allow performance degradation for more DVFS opportunities (see @perf_degradation_percentage in DVFSConfig).'''
+    '''Legacy NeuSim performance-degradation policy.'''
 
     @classmethod
     def from_str(cls, value: str | None) -> "DVFSPolicy":
-        if value is None:
+        if value is None or value == "":
             return cls.NONE
         # try:
         return cls(value)
@@ -119,12 +147,32 @@ class DVFSConfig(BaseModel):
     '''DVFS policy'''
 
     performance_degradation_percentage: float = 0.0
-    '''For DVFSPolicy.PERF_DEGRAD. Allowed performance degradation percentage. E.g., 0.05 is 5%.'''
+    '''Allowed performance degradation percentage. E.g., 0.05 is 5%.'''
+
+    frequency_adjustment_interval_ns: float = 1_000_000.0
+    '''Minimum duration (ns) a frequency-candidate region must span for the
+    millisecond-scale policies (DVFS_C_ms / CUSTOM_ALL_ms). Operators are merged
+    into regions until every region is at least this long, and one V/f is chosen
+    per region. Only used by the _ms policies. Default 1 ms.'''
+
+    custom_compute_domain_mode: str = "dom5"
+    '''
+    For the CUSTOM / CUSTOM_ALL policy: how the compute components (SA, VU, SRAM)
+    are grouped into shared voltage/frequency domains. HBM and ICI always remain
+    their own domains. Options:
+      - "dom5":        SA | VU | SRAM each independent  -> 5 domains (default)
+      - "dom3":        (SA+VU+SRAM)                      -> 3 domains
+      - "dom4_savu":   (SA+VU)   | SRAM                  -> 4 domains
+      - "dom4_sasram": (SA+SRAM) | VU                    -> 4 domains
+      - "dom4_vusram": (VU+SRAM) | SA                    -> 4 domains
+    '''
 
     def __hash__(self) -> int:
         return hash((
             self.policy,
             self.performance_degradation_percentage,
+            self.frequency_adjustment_interval_ns,
+            self.custom_compute_domain_mode,
         ))
 
 
@@ -381,10 +429,16 @@ class OperatorStatistics(BaseModel):
     '''Static energy consumption of VU in Joules'''
     static_energy_sram_J: float = 0
     '''Static energy consumption of SRAM (Vmem) in Joules'''
-    static_energy_hbm_J: float = 0
-    '''Static energy consumption of HBM controller+PHY in Joules'''
-    static_energy_ici_J: float = 0
-    '''Static energy consumption of ICI/NVLink in Joules'''
+    static_energy_hbm_mc_J: float = 0
+    '''Static energy consumption of HBM memory controller in Joules'''
+    static_energy_hbm_die_J: float = 0
+    '''Static energy consumption of HBM die (DRAM arrays) in Joules'''
+    static_energy_hbm_io_J: float = 0
+    '''Static energy consumption of HBM I/O in Joules'''
+    static_energy_ici_mc_J: float = 0
+    '''Static energy consumption of ICI memory controller in Joules'''
+    static_energy_ici_phy_J: float = 0
+    '''Static energy consumption of ICI PHY in Joules'''
     static_energy_other_J: float = 0
     '''Static energy consumption of other components in Joules'''
 
@@ -394,12 +448,80 @@ class OperatorStatistics(BaseModel):
     '''Dynamic energy consumption of VU in Joules'''
     dynamic_energy_sram_J: float = 0
     '''Dynamic energy consumption of SRAM (Vmem) in Joules'''
-    dynamic_energy_hbm_J: float = 0
-    '''Dynamic energy consumption of HBM controller+PHY+data transfer in Joules'''
-    dynamic_energy_ici_J: float = 0
-    '''Dynamic energy consumption of ICI/NVLink in Joules'''
+    dynamic_energy_hbm_mc_J: float = 0
+    '''Dynamic energy consumption of HBM memory controller in Joules'''
+    dynamic_energy_hbm_die_J: float = 0
+    '''Dynamic energy consumption of HBM die (DRAM arrays) in Joules'''
+    dynamic_energy_hbm_io_J: float = 0
+    '''Dynamic energy consumption of HBM I/O in Joules'''
+    dynamic_energy_ici_mc_J: float = 0
+    '''Dynamic energy consumption of ICI memory controller in Joules'''
+    dynamic_energy_ici_phy_J: float = 0
+    '''Dynamic energy consumption of ICI PHY in Joules'''
     dynamic_energy_other_J: float = 0
     '''Dynamic energy consumption of other components in Joules'''
+
+    @property
+    def static_energy_hbm_phy_J(self) -> float:
+        '''Backward-compat: static energy of HBM die + I/O in Joules'''
+        return self.static_energy_hbm_die_J + self.static_energy_hbm_io_J
+
+    @static_energy_hbm_phy_J.setter
+    def static_energy_hbm_phy_J(self, value: float) -> None:
+        self.static_energy_hbm_die_J = value
+        self.static_energy_hbm_io_J = 0.0
+
+    @property
+    def dynamic_energy_hbm_phy_J(self) -> float:
+        '''Backward-compat: dynamic energy of HBM die + I/O in Joules'''
+        return self.dynamic_energy_hbm_die_J + self.dynamic_energy_hbm_io_J
+
+    @dynamic_energy_hbm_phy_J.setter
+    def dynamic_energy_hbm_phy_J(self, value: float) -> None:
+        self.dynamic_energy_hbm_die_J = value
+        self.dynamic_energy_hbm_io_J = 0.0
+
+    @property
+    def static_energy_hbm_J(self) -> float:
+        '''Static energy consumption of HBM (MC + die + I/O) in Joules'''
+        return self.static_energy_hbm_mc_J + self.static_energy_hbm_die_J + self.static_energy_hbm_io_J
+
+    @static_energy_hbm_J.setter
+    def static_energy_hbm_J(self, value: float) -> None:
+        self.static_energy_hbm_mc_J = value
+        self.static_energy_hbm_die_J = 0.0
+        self.static_energy_hbm_io_J = 0.0
+
+    @property
+    def dynamic_energy_hbm_J(self) -> float:
+        '''Dynamic energy consumption of HBM (MC + die + I/O) in Joules'''
+        return self.dynamic_energy_hbm_mc_J + self.dynamic_energy_hbm_die_J + self.dynamic_energy_hbm_io_J
+
+    @dynamic_energy_hbm_J.setter
+    def dynamic_energy_hbm_J(self, value: float) -> None:
+        self.dynamic_energy_hbm_mc_J = value
+        self.dynamic_energy_hbm_die_J = 0.0
+        self.dynamic_energy_hbm_io_J = 0.0
+
+    @property
+    def static_energy_ici_J(self) -> float:
+        '''Static energy consumption of ICI (MC + PHY) in Joules'''
+        return self.static_energy_ici_mc_J + self.static_energy_ici_phy_J
+
+    @static_energy_ici_J.setter
+    def static_energy_ici_J(self, value: float) -> None:
+        self.static_energy_ici_mc_J = value
+        self.static_energy_ici_phy_J = 0.0
+
+    @property
+    def dynamic_energy_ici_J(self) -> float:
+        '''Dynamic energy consumption of ICI (MC + PHY) in Joules'''
+        return self.dynamic_energy_ici_mc_J + self.dynamic_energy_ici_phy_J
+
+    @dynamic_energy_ici_J.setter
+    def dynamic_energy_ici_J(self, value: float) -> None:
+        self.dynamic_energy_ici_mc_J = value
+        self.dynamic_energy_ici_phy_J = 0.0
 
     # power gating stats
     num_setpm_sa: int = 0
@@ -608,11 +730,47 @@ class Operator(BaseModel):
     dvfs_sram: ComponentDVFSConfig = ComponentDVFSConfig()
     '''DVFS config for on-chip SRAM / Vmem'''
 
-    dvfs_hbm: ComponentDVFSConfig = ComponentDVFSConfig()
-    '''DVFS config for HBM controller + PHY'''
+    dvfs_hbm_mc: ComponentDVFSConfig = ComponentDVFSConfig()
+    '''DVFS config for HBM memory controller'''
 
-    dvfs_ici: ComponentDVFSConfig = ComponentDVFSConfig()
-    '''DVFS config for ICI/NVLink'''
+    dvfs_hbm_die: ComponentDVFSConfig = ComponentDVFSConfig()
+    '''DVFS config for HBM die (DRAM arrays)'''
+
+    dvfs_hbm_io: ComponentDVFSConfig = ComponentDVFSConfig()
+    '''DVFS config for HBM I/O'''
+
+    dvfs_ici_mc: ComponentDVFSConfig = ComponentDVFSConfig()
+    '''DVFS config for ICI memory controller'''
+
+    dvfs_ici_phy: ComponentDVFSConfig = ComponentDVFSConfig()
+    '''DVFS config for ICI PHY (fixed voltage)'''
+
+    @property
+    def dvfs_hbm_phy(self) -> ComponentDVFSConfig:
+        '''Backward-compat: returns HBM die config.'''
+        return self.dvfs_hbm_die
+
+    @dvfs_hbm_phy.setter
+    def dvfs_hbm_phy(self, value: ComponentDVFSConfig) -> None:
+        self.dvfs_hbm_die = value
+
+    @property
+    def dvfs_hbm(self) -> ComponentDVFSConfig:
+        '''Backward-compat: returns HBM MC config (the DVFS-able part).'''
+        return self.dvfs_hbm_mc
+
+    @dvfs_hbm.setter
+    def dvfs_hbm(self, value: ComponentDVFSConfig) -> None:
+        self.dvfs_hbm_mc = value
+
+    @property
+    def dvfs_ici(self) -> ComponentDVFSConfig:
+        '''Backward-compat: returns ICI MC config (the DVFS-able part).'''
+        return self.dvfs_ici_mc
+
+    @dvfs_ici.setter
+    def dvfs_ici(self, value: ComponentDVFSConfig) -> None:
+        self.dvfs_ici_mc = value
 
 
     # temporary fields for compatibility with csv traces
@@ -662,17 +820,29 @@ class Operator(BaseModel):
             "Compute Time (ns)": self.stats.compute_time_ns,
             "Bytes Accessed": self.stats.memory_traffic_bytes,
 
-            # energy/power stats
+            # energy/power stats (MC/PHY split)
             "static_energy_sa_J": self.stats.static_energy_sa_J,
             "static_energy_vu_J": self.stats.static_energy_vu_J,
             "static_energy_sram_J": self.stats.static_energy_sram_J,
+            "static_energy_hbm_mc_J": self.stats.static_energy_hbm_mc_J,
+            "static_energy_hbm_die_J": self.stats.static_energy_hbm_die_J,
+            "static_energy_hbm_io_J": self.stats.static_energy_hbm_io_J,
+            "static_energy_hbm_phy_J": self.stats.static_energy_hbm_phy_J,
             "static_energy_hbm_J": self.stats.static_energy_hbm_J,
+            "static_energy_ici_mc_J": self.stats.static_energy_ici_mc_J,
+            "static_energy_ici_phy_J": self.stats.static_energy_ici_phy_J,
             "static_energy_ici_J": self.stats.static_energy_ici_J,
             "static_energy_other_J": self.stats.static_energy_other_J,
             "dynamic_energy_sa_J": self.stats.dynamic_energy_sa_J,
             "dynamic_energy_vu_J": self.stats.dynamic_energy_vu_J,
             "dynamic_energy_sram_J": self.stats.dynamic_energy_sram_J,
+            "dynamic_energy_hbm_mc_J": self.stats.dynamic_energy_hbm_mc_J,
+            "dynamic_energy_hbm_die_J": self.stats.dynamic_energy_hbm_die_J,
+            "dynamic_energy_hbm_io_J": self.stats.dynamic_energy_hbm_io_J,
+            "dynamic_energy_hbm_phy_J": self.stats.dynamic_energy_hbm_phy_J,
             "dynamic_energy_hbm_J": self.stats.dynamic_energy_hbm_J,
+            "dynamic_energy_ici_mc_J": self.stats.dynamic_energy_ici_mc_J,
+            "dynamic_energy_ici_phy_J": self.stats.dynamic_energy_ici_phy_J,
             "dynamic_energy_ici_J": self.stats.dynamic_energy_ici_J,
             "dynamic_energy_other_J": self.stats.dynamic_energy_other_J,
             "static_energy_J": self.stats.static_energy_J,
@@ -714,17 +884,47 @@ class Operator(BaseModel):
             "DVFS SRAM Scaling Time (ns)": self.dvfs_sram.voltage_regulator_scaling_time_ns,
             "DVFS SRAM Power Efficiency (%)": self.dvfs_sram.voltage_conversion_power_efficiency_percent,
 
-            "DVFS HBM Policy": self.dvfs_hbm.policy.value,
-            "DVFS HBM Voltage (V)": self.dvfs_hbm.voltage_V or 0.0,
-            "DVFS HBM Frequency (GHz)": self.dvfs_hbm.frequency_GHz or 0.0,
-            "DVFS HBM Scaling Time (ns)": self.dvfs_hbm.voltage_regulator_scaling_time_ns,
-            "DVFS HBM Power Efficiency (%)": self.dvfs_hbm.voltage_conversion_power_efficiency_percent,
+            # Legacy aggregate aliases mirror the DVFS-able controller domains.
+            "DVFS HBM Policy": self.dvfs_hbm_mc.policy.value,
+            "DVFS HBM Voltage (V)": self.dvfs_hbm_mc.voltage_V or 0.0,
+            "DVFS HBM Frequency (GHz)": self.dvfs_hbm_mc.frequency_GHz or 0.0,
+            "DVFS HBM Scaling Time (ns)": self.dvfs_hbm_mc.voltage_regulator_scaling_time_ns,
+            "DVFS HBM Power Efficiency (%)": self.dvfs_hbm_mc.voltage_conversion_power_efficiency_percent,
+            "DVFS ICI Policy": self.dvfs_ici_mc.policy.value,
+            "DVFS ICI Voltage (V)": self.dvfs_ici_mc.voltage_V or 0.0,
+            "DVFS ICI Frequency (GHz)": self.dvfs_ici_mc.frequency_GHz or 0.0,
+            "DVFS ICI Scaling Time (ns)": self.dvfs_ici_mc.voltage_regulator_scaling_time_ns,
+            "DVFS ICI Power Efficiency (%)": self.dvfs_ici_mc.voltage_conversion_power_efficiency_percent,
 
-            "DVFS ICI Policy": self.dvfs_ici.policy.value,
-            "DVFS ICI Voltage (V)": self.dvfs_ici.voltage_V or 0.0,
-            "DVFS ICI Frequency (GHz)": self.dvfs_ici.frequency_GHz or 0.0,
-            "DVFS ICI Scaling Time (ns)": self.dvfs_ici.voltage_regulator_scaling_time_ns,
-            "DVFS ICI Power Efficiency (%)": self.dvfs_ici.voltage_conversion_power_efficiency_percent,
+            "DVFS HBM MC Policy": self.dvfs_hbm_mc.policy.value,
+            "DVFS HBM MC Voltage (V)": self.dvfs_hbm_mc.voltage_V or 0.0,
+            "DVFS HBM MC Frequency (GHz)": self.dvfs_hbm_mc.frequency_GHz or 0.0,
+            "DVFS HBM MC Scaling Time (ns)": self.dvfs_hbm_mc.voltage_regulator_scaling_time_ns,
+            "DVFS HBM MC Power Efficiency (%)": self.dvfs_hbm_mc.voltage_conversion_power_efficiency_percent,
+
+            "DVFS HBM DIE Policy": self.dvfs_hbm_die.policy.value,
+            "DVFS HBM DIE Voltage (V)": self.dvfs_hbm_die.voltage_V or 0.0,
+            "DVFS HBM DIE Frequency (GHz)": self.dvfs_hbm_die.frequency_GHz or 0.0,
+            "DVFS HBM DIE Scaling Time (ns)": self.dvfs_hbm_die.voltage_regulator_scaling_time_ns,
+            "DVFS HBM DIE Power Efficiency (%)": self.dvfs_hbm_die.voltage_conversion_power_efficiency_percent,
+
+            "DVFS HBM IO Policy": self.dvfs_hbm_io.policy.value,
+            "DVFS HBM IO Voltage (V)": self.dvfs_hbm_io.voltage_V or 0.0,
+            "DVFS HBM IO Frequency (GHz)": self.dvfs_hbm_io.frequency_GHz or 0.0,
+            "DVFS HBM IO Scaling Time (ns)": self.dvfs_hbm_io.voltage_regulator_scaling_time_ns,
+            "DVFS HBM IO Power Efficiency (%)": self.dvfs_hbm_io.voltage_conversion_power_efficiency_percent,
+
+            "DVFS ICI MC Policy": self.dvfs_ici_mc.policy.value,
+            "DVFS ICI MC Voltage (V)": self.dvfs_ici_mc.voltage_V or 0.0,
+            "DVFS ICI MC Frequency (GHz)": self.dvfs_ici_mc.frequency_GHz or 0.0,
+            "DVFS ICI MC Scaling Time (ns)": self.dvfs_ici_mc.voltage_regulator_scaling_time_ns,
+            "DVFS ICI MC Power Efficiency (%)": self.dvfs_ici_mc.voltage_conversion_power_efficiency_percent,
+
+            "DVFS ICI PHY Policy": self.dvfs_ici_phy.policy.value,
+            "DVFS ICI PHY Voltage (V)": self.dvfs_ici_phy.voltage_V or 0.0,
+            "DVFS ICI PHY Frequency (GHz)": self.dvfs_ici_phy.frequency_GHz or 0.0,
+            "DVFS ICI PHY Scaling Time (ns)": self.dvfs_ici_phy.voltage_regulator_scaling_time_ns,
+            "DVFS ICI PHY Power Efficiency (%)": self.dvfs_ici_phy.voltage_conversion_power_efficiency_percent,
 
             "DVFS SA Activity Factor": self.stats.activity_factor_sa,
             "DVFS VU Activity Factor": self.stats.activity_factor_vu,
@@ -792,7 +992,17 @@ class Operator(BaseModel):
         op.output_tensor_shape_str = opdict["Output Tensor Shapes"]
 
         # DVFS configuration import helpers
-        def _parse_dvfs(prefix: str) -> ComponentDVFSConfig:
+        def _parse_dvfs(
+            prefix: str, legacy_prefix: str | None = None
+        ) -> ComponentDVFSConfig:
+            keys = (
+                f"DVFS {prefix} Policy",
+                f"DVFS {prefix} Voltage (V)",
+                f"DVFS {prefix} Frequency (GHz)",
+            )
+            if legacy_prefix is not None and not any(key in opdict for key in keys):
+                prefix = legacy_prefix
+
             policy_key = f"DVFS {prefix} Policy"
             v_key = f"DVFS {prefix} Voltage (V)"
             f_key = f"DVFS {prefix} Frequency (GHz)"
@@ -820,8 +1030,15 @@ class Operator(BaseModel):
         op.dvfs_sa = _parse_dvfs("SA")
         op.dvfs_vu = _parse_dvfs("VU")
         op.dvfs_sram = _parse_dvfs("SRAM")
-        op.dvfs_hbm = _parse_dvfs("HBM")
-        op.dvfs_ici = _parse_dvfs("ICI")
+        # Legacy HBM/ICI V/f columns represented the digital controller proxy.
+        # Map them only to MC. Newly separated analog die/I/O/PHY domains stay
+        # at NONE/default; copying a legacy low controller voltage onto their
+        # electrically distinct tables would be unsafe and non-reproducible.
+        op.dvfs_hbm_mc = _parse_dvfs("HBM MC", legacy_prefix="HBM")
+        op.dvfs_hbm_die = _parse_dvfs("HBM DIE")
+        op.dvfs_hbm_io = _parse_dvfs("HBM IO")
+        op.dvfs_ici_mc = _parse_dvfs("ICI MC", legacy_prefix="ICI")
+        op.dvfs_ici_phy = _parse_dvfs("ICI PHY")
 
         op.stats.activity_factor_sa = float(opdict.get("DVFS SA Activity Factor", 1.0))
         op.stats.activity_factor_vu = float(opdict.get("DVFS VU Activity Factor", 1.0))
