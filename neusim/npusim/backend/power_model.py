@@ -152,12 +152,17 @@ def analyze_dynamic_energy(
 
     # Dynamic powers
     if config.enable_dvfs:
+        # The DVFS tables are per-SA / per-VU, so scale them to the whole chip.
         sa_dyn_W, _ = get_power_from_dvfs("SA", op.dvfs_sa)
+        sa_dyn_W *= config.num_sa
         vu_dyn_W, _ = get_power_from_dvfs("VU", op.dvfs_vu)
+        vu_dyn_W *= config.num_vu
         sram_dyn_W, _ = get_power_from_dvfs("SRAM", op.dvfs_sram)
         hbm_dyn_W, _ = get_power_from_dvfs("HBM", op.dvfs_hbm)
         ici_dyn_W, _ = get_power_from_dvfs("ICI", op.dvfs_ici)
     else:
+        # config.dynamic_power_sa_W is already dynamic_power_W_per_SA * num_sa,
+        # i.e. a whole-chip number, so it must not be scaled by num_sa again.
         sa_dyn_W = config.dynamic_power_sa_W
         vu_dyn_W = config.dynamic_power_vu_W
         sram_dyn_W = config.dynamic_power_vmem_W
@@ -175,8 +180,8 @@ def analyze_dynamic_energy(
     ici_time_ns = op.stats.ici_time_ns
     hbm_time_ns = op.stats.memory_time_ns
 
-    op.stats.dynamic_energy_sa_J = sa_dyn_W * sa_time_ns * config.num_sa / 1e9 * sa_flops_util
-    op.stats.dynamic_energy_vu_J = vu_dyn_W * vu_time_ns * config.num_vu / 1e9 * vu_flops_util
+    op.stats.dynamic_energy_sa_J = sa_dyn_W * sa_time_ns / 1e9 * sa_flops_util
+    op.stats.dynamic_energy_vu_J = vu_dyn_W * vu_time_ns / 1e9 * vu_flops_util
     op.stats.dynamic_energy_sram_J = sram_dyn_W * vmem_time_ns / 1e9
     op.stats.dynamic_energy_ici_J = ici_dyn_W * ici_time_ns / 1e9
     op.stats.dynamic_energy_hbm_J = hbm_dyn_W * hbm_time_ns / 1e9
@@ -192,10 +197,12 @@ def analyze_sa_static_energy(
     Static power/energy analysis for SA.
     """
     if config.enable_dvfs:
+        # get_power_from_dvfs returns the leakage of a single SA.
         _, static_sa_W = get_power_from_dvfs("SA", op.dvfs_sa)
+        static_sa_W *= config.num_sa
     else:
+        # ChipConfig.static_power_sa_W is already static_power_W_per_sa * num_sa.
         static_sa_W = config.static_power_sa_W
-    static_sa_W *= config.num_sa
     pg_power_W = static_sa_W * pg_config.sa_power_level_factors[-1]
 
     # No power-gating
@@ -364,10 +371,12 @@ def analyze_vu_static_energy(
     Static power/energy analysis for VU.
     """
     if config.enable_dvfs:
+        # get_power_from_dvfs returns the leakage of a single VU.
         _, static_vu_W = get_power_from_dvfs("VU", op.dvfs_vu)
+        static_vu_W *= config.num_vu
     else:
+        # ChipConfig.static_power_vu_W is already static_power_W_per_vu * num_vu.
         static_vu_W = config.static_power_vu_W
-    static_vu_W *= config.num_vu
     pg_power_W = static_vu_W * pg_config.vu_power_level_factors[-1]
 
     # No power-gating
